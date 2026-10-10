@@ -2,7 +2,7 @@
 
 `eai-backend-poc` was created on 9 October 2026 as a fresh-history copy of
 [`eai-azure-poc`](https://github.com/nikmar0808/eai-azure-poc), taken with `git archive` from tag `v1.0.0`
-(commit `<SOURCE_SHA>`). No commit of the original repository is reachable from this one (ADR-001, ADR-010).
+(commit `415c99ebc96370ee33dd34a3c2b1ffe5c8316281`). No commit of the original repository is reachable from this one (ADR-001, ADR-010).
 
 ## Carried across
 
