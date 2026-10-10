@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: EAI Transformation Service API
+  version: 0.1.0
+  description: |
+    API of python-validator. The transform route is called by java-gateway; the readings route is called directly
+    by clients. Both require the shared token. Hand-written (contract-first); known deviations are listed in
+    docs/api/README.md.
+  contact:
+    name: eai-backend-poc
+    url: https://github.com/nikmar0808/eai-backend-poc
+servers:
+  - url: http://localhost:8082
+    description: Local Docker Compose
+tags:
+  - name: Health
+    description: Service and database readiness.
+  - name: Ingestion
+    description: Validation and storage of readings.
+  - name: Readings
+    description: Retrieval of stored readings.
+paths:
+  /:
+    get:
+      tags: [Health]
+      operationId: getServiceInfo
+      summary: Service information
+      description: Static information about the running service. Checks nothing downstream.
+      security: []
+      responses:
+        "200":
+          description: The service is running.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceInfo" }
+  /health:
+    get:
+      tags: [Health]
+      operationId: getServiceHealth
+      summary: Service and database health
+      description: Runs a trivial query against the database.
+      security: []
+      responses:
+        "200":
+          description: The service and the database are up.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceHealth" }
+        "503":
+          description: The database is down.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceHealth" }
+  /api/v1/transform:
+    post:
+      tags: [Ingestion]
+      operationId: transformReadings
+      summary: Validate and store readings
+      description: Authenticates the caller, validates the payload, stores one row per reading in one transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransformRequest" }
+      responses:
+        "200":
+          description: Readings validated and stored.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransformationResponse" }
+        "401":
+          description: The X-EAI-TOKEN header is missing or wrong.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DetailError" }
+        "422":
+          description: The payload failed validation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HTTPValidationError" }
+        "500":
+          description: The write failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DetailError" }
+  /api/v1/meters/{meter_id}/readings:
+    get:
+      tags: [Readings]
+      operationId: getRecentReadings
+      summary: Most recent readings of one meter
+      description: Returns up to `limit` readings of the meter, newest first. An unknown meter returns an empty list.
+      parameters:
+        - name: meter_id
+          in: path
+          required: true
+          description: Meter identifier, 5 to 20 characters.
+          schema: { type: string, minLength: 5, maxLength: 20 }
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of readings to return.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: The readings, newest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadingsResponse" }
+        "401":
+          description: The X-EAI-TOKEN header is missing or wrong.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DetailError" }
+        "422":
+          description: A parameter failed validation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HTTPValidationError" }
+security:
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-EAI-TOKEN
+      description: Shared token known to every caller of this service.
+  schemas:
+    TransformRequest:
+      type: object
+      required: [meter_id, grid_zone, readings]
+      properties:
+        meter_id: { type: string, minLength: 5, maxLength: 20 }
+        grid_zone: { type: string, minLength: 1, maxLength: 50, pattern: '\S' }
+        readings:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/MeterReading" }
+    MeterReading:
+      type: object
+      required: [timestamp, kwh_value]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 date-time. A UTC offset is mandatory.
+        kwh_value: { type: number, format: double, minimum: 0, exclusiveMinimum: true }
+        voltage: { type: number, format: double, minimum: 100, maximum: 300, nullable: true }
+    TransformationResponse:
+      type: object
+      required: [message, metadata, analytics_summary]
+      properties:
+        message: { type: string }
+        metadata:
+          type: object
+          required: [processed_asset, regional_zone, intervals_saved]
+          properties:
+            processed_asset: { type: string }
+            regional_zone: { type: string }
+            intervals_saved: { type: integer }
+        analytics_summary:
+          type: object
+          required: [cumulative_kwh, average_load_per_interval]
+          properties:
+            cumulative_kwh: { type: number, format: double }
+            average_load_per_interval: { type: number, format: double }
+    ReadingsResponse:
+      type: object
+      required: [meter_id, count, readings]
+      properties:
+        meter_id: { type: string }
+        count: { type: integer }
+        readings:
+          type: array
+          items: { $ref: "#/components/schemas/ReadingItem" }
+    ReadingItem:
+      type: object
+      required: [timestamp, kwh_value]
+      properties:
+        timestamp:
+          type: string
+          description: |
+            ISO 8601 local date-time WITHOUT an offset, as stored (for example 2026-10-09T05:30:00).
+            Not RFC 3339. Becomes an offset date-time when storage moves to timestamptz (POC 3, finding D14).
+          example: "2026-10-09T05:30:00"
+        kwh_value: { type: number, format: double }
+        voltage: { type: number, format: double, nullable: true }
+    ServiceInfo:
+      type: object
+      required: [status, engine, version]
+      properties:
+        status: { type: string }
+        engine: { type: string }
+        version: { type: string }
+    ServiceHealth:
+      type: object
+      required: [status, database]
+      properties:
+        status: { type: string, enum: [UP, DOWN] }
+        database: { type: string, enum: [UP, DOWN] }
+    DetailError:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationErrorItem" }
+    ValidationErrorItem:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            oneOf:
+              - { type: string }
+              - { type: integer }
+        msg: { type: string }
+        type: { type: string }

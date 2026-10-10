@@ -1,0 +1,5 @@
+extends: ["spectral:oas"]
+rules:
+  # A learning repository declares no licence in its contract.
+  info-license: off
+  license-url: off
