@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
-public class TransformationClient {
+public class TransformationClient implements TransformationGateway {
 
     private final RestClient restClient;
 
@@ -22,6 +22,7 @@ public class TransformationClient {
                 .build();
     }
 
+    @Override
     public TransformationResponse transform(BulkIngestionRequest request) {
         return restClient.post()
                 .uri("/api/v1/transform")

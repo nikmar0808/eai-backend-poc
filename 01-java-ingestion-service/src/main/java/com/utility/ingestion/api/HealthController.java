@@ -1,47 +1,54 @@
 package com.utility.ingestion.api;
 
 import com.utility.ingestion.configuration.IntegrationProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-
-import java.time.Duration;
 
 @RestController
 public class HealthController {
 
     private final RestClient downstreamClient;
 
-    public HealthController(RestClient.Builder restClientBuilder, IntegrationProperties properties) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout((int) Duration.ofSeconds(2).toMillis());
-        requestFactory.setReadTimeout((int) Duration.ofSeconds(2).toMillis());
-
+    public HealthController(
+            RestClient.Builder restClientBuilder,
+            IntegrationProperties properties,
+            @Qualifier("downstreamProbeRequestFactory") ClientHttpRequestFactory probeRequestFactory) {
         this.downstreamClient = restClientBuilder
                 .baseUrl(properties.baseUrl())
-                .requestFactory(requestFactory)
+                .requestFactory(probeRequestFactory)
                 .build();
     }
 
-    public record HealthStatus(String status, String pythonValidator) {}
+    public enum ServiceStatus { UP, DOWN }
 
+    public record HealthStatus(ServiceStatus status, ServiceStatus pythonValidator) {}
+
+    /**
+     * The gateway has one dependency, the Python service, whose own /health checks the database. The gateway is
+     * therefore ready exactly when that probe succeeds, and the overall status equals the downstream status.
+     */
     @GetMapping("/health")
     public ResponseEntity<HealthStatus> health() {
-        String downstreamStatus;
-        try {
-            downstreamClient.get().uri("/").retrieve().toBodilessEntity();
-            downstreamStatus = "UP";
-        } catch (RestClientException e) {
-            downstreamStatus = "DOWN";
-        }
+        ServiceStatus downstream = probeDownstream();
+        HealthStatus body = new HealthStatus(downstream, downstream);
+        return downstream == ServiceStatus.UP
+                ? ResponseEntity.ok(body)
+                : ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body);
+    }
 
-        HealthStatus body = new HealthStatus("UP", downstreamStatus);
-        return "DOWN".equals(downstreamStatus)
-                ? ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body)
-                : ResponseEntity.ok(body);
+    private ServiceStatus probeDownstream() {
+        try {
+            downstreamClient.get().uri("/health").retrieve().toBodilessEntity();
+            return ServiceStatus.UP;
+        } catch (RestClientException e) {
+            // Python answers 503 when its database is down; that arrives here as an exception too.
+            return ServiceStatus.DOWN;
+        }
     }
 }

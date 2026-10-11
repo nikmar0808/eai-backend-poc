@@ -16,9 +16,11 @@ public record BulkIngestionRequest(
 
         @JsonProperty("grid_zone")
         @NotBlank(message = "Grid Zone cannot be blank")
+        @Size(max = 50, message = "Grid Zone must be at most 50 characters")
         String gridZone,
 
         @NotEmpty(message = "Readings array cannot be empty")
+        @Size(max = 1000, message = "At most 1000 readings per request")
         @Valid
         List<MeterReadingRequest> readings
 ) {
