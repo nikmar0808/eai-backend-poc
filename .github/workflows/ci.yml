@@ -7,6 +7,7 @@ name: CI
 # Job names are what branch rules call "required status checks": no job is renamed. Later gates are added to this file.
 #   push to develop or feature/**, and every pull request -> scans + build/test of both services
 #   pull_request                                           -> image-scan: build and Trivy-scan each image, push nothing
+# Added in POC 2: contract-lint (Stage 1)
 
 on:
   push:
@@ -85,6 +86,19 @@ jobs:
           trivyignores: .trivyignore
           exit-code: 1
           format: table
+
+  contract-lint:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      # Warnings fail the job: the contract has to be clean, not merely valid.
+      - run: npx --yes @stoplight/spectral-cli@6 lint --fail-severity warn docs/api/gateway.openapi.yaml docs/api/validator.openapi.yaml
 
   java-build-test:
     needs: [secret-scan, dependency-scan]

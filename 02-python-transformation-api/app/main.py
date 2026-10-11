@@ -63,7 +63,7 @@ app = FastAPI(
 
 # Base health-check endpoint
 @app.get("/")
-def read_root():
+def read_root() -> dict[str, str]:
     return {
         "status": "operational",
         "engine": "FastAPI",
@@ -71,7 +71,7 @@ def read_root():
     }
 # health-check for the database
 @app.get("/health")
-def health_check():
+def health_check() -> JSONResponse:
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
