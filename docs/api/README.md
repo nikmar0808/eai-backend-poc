@@ -31,11 +31,11 @@ Both are written by hand and are the source of truth; the code conforms to them 
 
 | # | Contract says | Code does today | Closed in |
 |---|---|---|---|
-| 1 | Gateway rejects `voltage` outside 100 to 300 | Not checked | Stage 1A |
-| 2 | Gateway rejects `grid_zone` longer than 50 and `readings` longer than 1000 | Not checked | Stage 1A |
-| 3 | Python rejects a naive timestamp, an empty `readings`, a blank or over-long `grid_zone`, more than 1000 readings | Accepts them | Stage 1A |
-| 4 | Gateway `/health` reports `status: DOWN` with HTTP 503 when the downstream is down | Reports `status: UP` with HTTP 503 | Stage 1A |
-| 5 | Gateway `/health` reflects the database through Python's `/health` | Probes Python's `/`, which checks nothing downstream | Stage 1A |
-| 6 | Readings route rejects a `meter_id` outside 5 to 20 characters (422) | Accepts any string | Stage 1A |
+| 1 | ~~Gateway rejects `voltage` outside 100 to 300~~ | Not checked | Stage 1A |
+| 2 | ~~Gateway rejects `grid_zone` longer than 50 and `readings` longer than 1000~~ | Not checked | Stage 1A |
+| 3 | ~~Python rejects a naive timestamp, an empty `readings`, a blank or over-long `grid_zone`, more than 1000 readings~~ | Accepts them | Stage 1A |
+| 4 | ~~Gateway `/health` reports `status: DOWN` with HTTP 503 when the downstream is down~~ | Reports `status: UP` with HTTP 503 | Stage 1A |
+| 5 | ~~Gateway `/health` reflects the database through Python's `/health`~~ | Probes Python's `/`, which checks nothing downstream | Stage 1A |
+| 6 | ~~Readings route rejects a `meter_id` outside 5 to 20 characters (422)~~ | Accepts any string | Stage 1A |
 | 7 | Gateway answers 502 or 504 when the downstream rejects, fails, is unreachable or times out | Answers a generic 500 | Stage 6 (timeout: Stage 2) |
 | 8 | Readings `timestamp` is a local date-time without offset | Same (documented as it is) | POC 3 (`timestamptz`) |
