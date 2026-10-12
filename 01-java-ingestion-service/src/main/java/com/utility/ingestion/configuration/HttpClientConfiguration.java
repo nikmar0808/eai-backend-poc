@@ -20,4 +20,16 @@ public class HttpClientConfiguration {
         factory.setReadTimeout((int) PROBE_TIMEOUT.toMillis());
         return factory;
     }
+    /** Customizer for configuring downstream timeouts if Spring Boot does not apply `spring.http.client.read-timeout` to the client*/
+    // @Bean
+    // public org.springframework.boot.web.client.RestClientCustomizer downstreamTimeouts(
+    //         @org.springframework.beans.factory.annotation.Value("${spring.http.client.read-timeout:30s}") Duration readTimeout,
+    //         @org.springframework.beans.factory.annotation.Value("${spring.http.client.connect-timeout:5s}") Duration connectTimeout) {
+    //     return builder -> {
+    //         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    //         factory.setConnectTimeout((int) connectTimeout.toMillis());
+    //         factory.setReadTimeout((int) readTimeout.toMillis());
+    //         builder.requestFactory(factory);
+    //     };
+    // }    
 }
