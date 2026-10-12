@@ -85,7 +85,6 @@ The scan gates were first built and proved in `eai-azure-poc`, where the finding
 
 | Limitation | Note |
 |---|---|
-| The gateway has no unit tests (`src/test` is empty) | Stage 2 of the roadmap |
 | The two services share one static token and the gateway has no caller authentication | OAuth2/JWT in Stage 5; production adds mutual TLS or workload identity between services |
 | PostgreSQL runs as a local container with a named volume | A production system uses a managed database service with backups |
 | No migration tool: the Python service creates its tables when it starts | Planned with the data layer |
@@ -94,9 +93,9 @@ The scan gates were first built and proved in `eai-azure-poc`, where the finding
 ## Roadmap
 
 - [x] Stage 0 — repository created, comprehension gate
-- [ ] Stage 1 — contract-first OpenAPI, linting, breaking-change check
-- [ ] Stage 1A — code maturity: types, interfaces, response models
-- [ ] Stage 2 — Java tests (JUnit 5, Mockito, MockMvc, WireMock, JaCoCo)
+- [x] Stage 1 — contract-first OpenAPI, linting, breaking-change check
+- [x] Stage 1A — code maturity: types, interfaces, response models
+- [x] Stage 2 — Java tests (JUnit 5, Mockito, MockMvc, WireMock, JaCoCo)
 - [ ] Stage 3 — Python tests (pytest, rolling-back database fixture, Schemathesis)
 - [ ] Stage 4 — cross-service integration tests in CI
 - [ ] Stage 5 — OAuth2/JWT resource server with Keycloak
