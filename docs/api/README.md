@@ -37,6 +37,6 @@ Both are written by hand and are the source of truth; the code conforms to them 
 | 4 | ~~Gateway `/health` reports `status: DOWN` with HTTP 503 when the downstream is down~~ | Reports `status: UP` with HTTP 503 | Stage 1A |
 | 5 | ~~Gateway `/health` reflects the database through Python's `/health`~~ | Probes Python's `/`, which checks nothing downstream | Stage 1A |
 | 6 | ~~Readings route rejects a `meter_id` outside 5 to 20 characters (422)~~ | Accepts any string | Stage 1A |
-| 7 | Gateway answers 502 or 504 when the downstream rejects, fails, is unreachable or times out | Answers a generic 500 | Stage 6 (timeout: Stage 2) |
+| 7 | Gateway answers 502 or 504 when the downstream rejects, fails, is unreachable or times out | Answers a generic 500 | Stage 6 (*timeout half closed (configuration in Stage 1A, proved in Stage 2); the 502/504 mapping remains for Stage 6*) |
 | 8 | Readings `timestamp` is a local date-time without offset | Same (documented as it is) | POC 3 (`timestamptz`) |
 | 9 | `details` keys are field names | The keys are Java property names (meterId) — D22 | Stage 6 |
