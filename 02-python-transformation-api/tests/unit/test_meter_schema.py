@@ -86,6 +86,11 @@ def test_kwh_value_is_strictly_positive(kwh, rejected):
     assert (("readings", 0, "kwh_value") in violations(payload(readings=[reading(kwh_value=kwh)]))) is rejected
 
 
+@pytest.mark.parametrize("kwh, rejected", [(1000000.0, False), (1000000.01, True)])     # P06b: 2 runs
+def test_kwh_value_has_an_upper_bound(kwh, rejected):
+    assert (("readings", 0, "kwh_value") in violations(payload(readings=[reading(kwh_value=kwh)]))) is rejected
+
+
 @pytest.mark.parametrize(                                                                 # P07: 5 runs
     "voltage, rejected", [(None, False), (99.99, True), (100, False), (300, False), (300.01, True)]
 )

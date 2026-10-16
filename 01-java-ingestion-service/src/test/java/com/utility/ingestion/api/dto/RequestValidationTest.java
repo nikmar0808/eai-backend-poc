@@ -9,6 +9,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.utility.ingestion.TestData;
+
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -83,6 +85,14 @@ class RequestValidationTest {
     @ParameterizedTest(name = "kwh_value {0} -> violation: {1}")
     @CsvSource(value = {"-1,true", "0,true", "0.001,false", "NIL,true"}, nullValues = "NIL")
     void kwhValueMustBeStrictlyPositive(Double kwh, boolean violated) {
+        Set<String> paths = violatedPaths(request("MTR-POC2-001", "ZONE-A", List.of(reading(kwh, 230.0))));
+        assertThat(paths.contains("readings[0].kwhValue")).isEqualTo(violated);
+    }
+
+    // Upper bound of the contract (maximum: 1000000). Inclusive: the bound itself is valid.
+    @ParameterizedTest(name = "kwh_value {0} -> violation: {1}")
+    @CsvSource({"1000000,false", "1000000.01,true"})
+    void kwhValueHasAnUpperBound(Double kwh, boolean violated) {
         Set<String> paths = violatedPaths(request("MTR-POC2-001", "ZONE-A", List.of(reading(kwh, 230.0))));
         assertThat(paths.contains("readings[0].kwhValue")).isEqualTo(violated);
     }

@@ -140,14 +140,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.14", cache: pip }
+        with:
+          python-version: "3.14"
+          cache: pip                                              # reuses downloaded packages between runs
+          cache-dependency-path: 02-python-transformation-api/requirements*.txt   # the cache key now covers both files
       - working-directory: 02-python-transformation-api
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt                 # runtime + test tools (was: requirements.txt only)
       - working-directory: 02-python-transformation-api
         env:
           DATABASE_URL: postgresql+psycopg://smart_meter_admin:ci-only-test-password@localhost:5432/smart_meter_warehouse # disposable CI test value, not an actual credential
           API_SECURITY_TOKEN: ci-only-test-token # disposable CI test value, not an actual credential
-        run: pytest tests
+        run: pytest tests --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=92
+      - if: always()                    # upload the report even when the tests or the gate failed
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage-report
+          path: 02-python-transformation-api/htmlcov
+          if-no-files-found: ignore
 
   # Pull requests only: build each image and scan it, push nothing. A vulnerable image blocks a merge before it
   # reaches develop. fail-fast is off so that one vulnerable image does not hide the result for the other.

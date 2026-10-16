@@ -15,6 +15,7 @@ public record MeterReadingRequest(
         @JsonProperty("kwh_value")
         @NotNull(message = "KWH value cannot be null")
         @Positive(message = "KWH value must be greater than zero")
+        @DecimalMax(value = "1000000.0", message = "KWH value must be at most 1000000")
         Double kwhValue,
 
         @JsonProperty("voltage")
