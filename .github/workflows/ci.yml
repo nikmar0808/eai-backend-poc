@@ -8,6 +8,7 @@ name: CI
 #   push to develop or feature/**, and every pull request -> scans + build/test of both services
 #   pull_request                                           -> image-scan: build and Trivy-scan each image, push nothing
 # Added in POC 2: contract-lint (Stage 1)
+# Added in POC 2: e2e (Stage 4): the real stack, the cross-service suite, Schemathesis (advisory until Stage 7).
 
 on:
   push:
@@ -181,3 +182,64 @@ jobs:
           ignore-unfixed: true
           trivyignores: .trivyignore
           exit-code: 1
+  # Starts the real stack (gateway, Python service, PostgreSQL) and tests across the service boundary. The stack is
+  # built from the pull request's own code, so a change that breaks the gateway/Python contract fails here and
+  # nowhere earlier. The .env values are random, exist only on this runner and are masked in the log.
+  e2e:
+    # Start only after the two fast unit/slice jobs have passed: no point building a stack for broken code.
+    needs: [java-build-test, python-build-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25        # a hung stack costs 25 minutes, not the default six hours
+    # Same triggers as python-build-test (Step 1 decides whether these four lines stay).
+    if: >
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
+    steps:
+      - uses: actions/checkout@v4          # fetch the pull request's code onto the runner
+      - name: Create .env with throw-away random values
+        run: |
+          set -e                            # stop at the first failing command
+          PW=$(openssl rand -hex 16)        # 32 random hex characters
+          TOKEN=$(openssl rand -hex 24)     # 48 random hex characters
+          echo "::add-mask::$PW"            # replace these values with *** in every later log line
+          echo "::add-mask::$TOKEN"
+          printf 'POSTGRES_PASSWORD=%s\nAPI_SECURITY_TOKEN=%s\n' "$PW" "$TOKEN" > .env    # read by docker compose
+          echo "POSTGRES_PASSWORD=$PW" >> "$GITHUB_ENV"        # make the same values visible to later steps:
+          echo "API_SECURITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"    # the test process and the Schemathesis commands
+      - name: Start the stack and wait until every service is healthy
+        run: |
+          docker compose version
+          docker compose -f docker-compose.dev.yml up -d --build --wait --wait-timeout 300
+      - uses: actions/setup-python@v5       # a Python for the test process (the services run in containers)
+        with:
+          python-version: "3.14"
+          cache: pip                         # cache downloaded packages between runs
+          cache-dependency-path: e2e/requirements.txt    # the cache key is the hash of this file
+      - run: pip install -r e2e/requirements.txt
+      - name: End-to-end tests
+        run: python -m pytest e2e            # from the repository root; support.py defaults to 127.0.0.1
+      # Advisory until Stage 7 (docs/api/README.md, "Conformance findings (Stage 4)"): the findings are recorded
+      # defects with closing stages, so a failure is shown with a warning mark but does not fail the job.
+      # Two separate steps: each step runs under bash -e, so findings in a first run would stop a second run in the
+      # same step. --continue-on-failure: keep generating cases for an operation after its first failure.
+      - name: Schemathesis against the Python contract (advisory)
+        continue-on-error: true
+        run: >
+          docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
+          run /w/docs/api/validator.openapi.yaml --url http://127.0.0.1:8082
+          -H "X-EAI-TOKEN: $API_SECURITY_TOKEN" --checks all --continue-on-failure
+      - name: Schemathesis against the gateway contract (advisory)
+        continue-on-error: true
+        run: >
+          docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
+          run /w/docs/api/gateway.openapi.yaml --url http://127.0.0.1:8081
+          --checks all --continue-on-failure
+      - name: Service logs (on failure)
+        if: failure()                        # only after an earlier, non-advisory step failed
+        run: |
+          docker compose -f docker-compose.dev.yml ps -a
+          docker compose -f docker-compose.dev.yml logs --no-color --tail 200
+      - name: Tear the stack down
+        if: always()                         # even after a failure or a cancellation
+        run: docker compose -f docker-compose.dev.yml down -v
