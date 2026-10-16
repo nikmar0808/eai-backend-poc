@@ -9,7 +9,7 @@ class MeterReading(BaseModel):
     One interval reading. The rules are those of docs/api/README.md.
     """
     timestamp: AwareDatetime = Field(description="RFC 3339 date-time with a UTC offset. A naive time is rejected.")
-    kwh_value: float = Field(gt=0.0, description="Active energy consumption in kWh. Strictly greater than zero.")
+    kwh_value: float = Field(gt=0.0, le=1000000.0, description="Active energy consumption in kWh. Strictly greater than zero, and at most 1000000 kWh.")
     voltage: Optional[float] = Field(default=None, ge=100.0, le=300.0, description="Optional grid voltage, 100 to 300.")
 
 

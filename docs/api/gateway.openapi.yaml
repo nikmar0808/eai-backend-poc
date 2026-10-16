@@ -115,6 +115,7 @@ components:
           type: number
           format: double
           minimum: 0
+          maximum: 1000000
           exclusiveMinimum: true
           description: Active energy consumption in kWh. Strictly greater than zero.
         voltage:
