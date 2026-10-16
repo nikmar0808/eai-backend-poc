@@ -148,7 +148,7 @@ jobs:
         run: pip install -r requirements-dev.txt                 # runtime + test tools (was: requirements.txt only)
       - working-directory: 02-python-transformation-api
         env:
-          DATABASE_URL: postgresql+psycopg://smart_meter_admin:ci-only-test-password@localhost:5432/smart_meter_warehouse # disposable CI test value, not an actual credential
+          DATABASE_URL: postgresql+psycopg://smart_meter_admin:ci-only-test-password@127.0.0.1:5432/smart_meter_warehouse # disposable CI test value, not an actual credential
           API_SECURITY_TOKEN: ci-only-test-token # disposable CI test value, not an actual credential
         run: pytest tests --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=92
       - if: always()                    # upload the report even when the tests or the gate failed
