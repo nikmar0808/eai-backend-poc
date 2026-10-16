@@ -9,8 +9,6 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.utility.ingestion.TestData;
-
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
