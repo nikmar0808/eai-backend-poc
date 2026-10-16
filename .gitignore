@@ -30,3 +30,4 @@ node_modules/
 coverage.xml
 htmlcov/
 .hypothesis/
+.schemathesis/

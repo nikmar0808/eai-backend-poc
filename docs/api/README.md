@@ -41,10 +41,19 @@ Both are written by hand and are the source of truth; the code conforms to them 
 | 8 | Readings `timestamp` is a local date-time without offset | Same (documented as it is) | POC 3 (`timestamptz`) |
 | 9 | `details` keys are field names | The keys are Java property names (meterId) — D22 | Stage 6 |
 
-## Conformance findings (Stage 3)
+## Conformance findings (Stage 4)
 
-| # | Reproduction | Verdict | Closing Stage |
-|---|---|---|---|
-| 1	| POST /api/v1/transform with "timestamp": 0 (a number) answers 200	| Code is wrong (the contract says string) | Open: Stage 6 |
-| 2 | kwh_value values near 1e308 give an infinite sum; the response carries null in cumulative_kwh and average_load_per_interval, which the contract says are numbers | Contract is wrong (no upper bound) and the code is wrong (it accepts and does not guard) | Closed: maximum: 1000000 in both contracts; enforced by le=1000000.0 (Python) and @DecimalMax (Java); proved by P06b, T12b and a clean Schemathesis re-run |
-| 3	| A body that cannot be decoded gets an undocumented 400	| Contract incomplete | Open: Stage 6 (with problem+json) Seed: 184592246219682254443862945054262018044 |
+Schemathesis 4.31.1 (image `schemathesis/schemathesis:4.31.1`), run on 16 October 2026 against the running Compose
+stack, with both hand-written contracts and `--continue-on-failure` (without it, the first failure stopped the
+gateway's ingest route after 15 cases at 3.4% keyword coverage; with it, 198 cases at 100%). Findings 5 and 6 were also
+reproduced by hand with a single clean request.
+
+| # | Service | Finding | Verdict | Status |
+|---|---|---|---|---|
+| 1 | Both | `timestamp: 0` (a number) is accepted: Pydantic and Jackson both convert a number to a date | Code wrong in both | Open, Stage 6 (D29, Stage 3 finding 1, widened to the gateway) |
+| 2 | Python | A body that cannot be decoded gets FastAPI's own 400, which the contract does not document | Contract incomplete; the body is not ours | Open, Stage 6 (D30, Stage 3 finding 3) |
+| 3 | Gateway | `Content-Type: multipart/form-data` without a boundary answers 500, on `/health` and on the ingest route | Code wrong: a malformed request is a 400 | Open, Stage 6 (D34) |
+| 4 | Gateway | A missing or unparseable body gets 400 with Spring's default body (no `details`), not the contract's `ErrorResponse`; `08-malformed-json.json` takes the same path | Code wrong: no handler for `HttpMessageNotReadableException` | Open, Stage 6 (D35) |
+| 5 | Gateway | `readings: [null]` passes the gateway's rules; Python rejects it (422); the gateway answers a generic 500 (D3) | Code wrong: elements are not required to be non-null; the services disagree | Open, Stage 6 (D36) |
+| 6 | Both | A time-zone offset beyond ±18:00 (allowed by RFC 3339) cannot be parsed by the gateway (400, default body) and is accepted by Python | Contract too loose; the services disagree | Open, Stage 6 (D37): the contract gains an offset pattern up to ±14:00, and both services enforce it |
+| 7 | Python | A `grid_zone` or `meter_id` containing the NUL character (`\u0000`) passes validation and fails at the `INSERT` (PostgreSQL text cannot hold NUL): 500, and the body echoes the database error, the full SQL statement and the request's values | Contract too loose and code wrong (should be 422); the 500 body leaks internals | Open, Stage 6 (D39; D6 widened: the echoed text includes SQL and input values) |

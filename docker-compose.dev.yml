@@ -50,8 +50,18 @@ services:
       # - "${VALIDATOR_HOST_PORT:-8082}:8082"  # fine to keep exposed for LOCAL dev/testing — this is the dev compose file only
     depends_on:
       postgres-db: { condition: service_healthy }
+    healthcheck:
+      # Python's own /health runs SELECT 1 and answers 503 when the database is down. urlopen raises an exception on
+      # any 4xx or 5xx answer, and "python -c" turns an uncaught exception into exit code 1, so the exit code is
+      # non-zero exactly when the service is not ready. The slim image has no curl or wget, so Python is the client.
+      # timeout=3 inside the command is shorter than the check's own timeout of 5s, so the command ends itself first.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
+      interval: 10s      # run every 10 seconds
+      timeout: 5s        # a run longer than 5 seconds counts as a failure
+      retries: 3         # three failures in a row: unhealthy
+      start_period: 20s  # failures in the first 20 seconds are not counted
     networks: [eai-mesh]
-
+  
   # Node 3: Enterprise Gateway Ingress Orchestrator
   java-gateway:
     build: { context: ./01-java-ingestion-service, dockerfile: Dockerfile }
@@ -69,5 +79,17 @@ services:
       # Comment above and uncomment the line below to override the host port for java-gateway to prevent collision with another set of services on port 8081
       # Defaults to 8081 on the host if GATEWAY_HOST_PORT is unset
       # - "${GATEWAY_HOST_PORT:-8081}:8081"  # fine to keep exposed for LOCAL dev/testing — this is the dev compose file only
-    depends_on: [python-validator]
+    depends_on:
+      # Start the gateway only when Python's health check has passed. The short form (a list) waits only for the
+      # python-validator PROCESS to exist, which is the gap noted in the Azure window (B2.6).
+      python-validator: { condition: service_healthy }
+    healthcheck:
+      # BusyBox wget exits non-zero on any HTTP error, including the 503 the gateway returns when Python is down.
+      # -q quiet; -O /dev/null throw the body away (only the exit code matters).
+      # 127.0.0.1, not localhost: the gateway listens on 0.0.0.0 (IPv4) and Alpine may resolve localhost to ::1 first.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6         # more tolerance than Python: its answer depends on Python, and a JVM can pause briefly
+      start_period: 40s  # Spring Boot needs about half a minute to start on a laptop
     networks: [eai-mesh]
