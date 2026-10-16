@@ -71,7 +71,8 @@ services:
       - SERVER_PORT=8081
       # Remap destination URL target dynamically to use internal Docker DNS naming!
       - INTEGRATION_PYTHON_BASE-URL=http://python-validator:8082
-      - INTEGRATION_PYTHON_AUTH-TOKEN=${API_SECURITY_TOKEN:?set in .env}
+      #- INTEGRATION_PYTHON_AUTH-TOKEN=${API_SECURITY_TOKEN:?set in .env}
+      - INTEGRATION_PYTHON_AUTH-TOKEN=wrong-token
       - TZ=Asia/Kolkata
       - JAVA_OPTS=-Duser.timezone=Asia/Kolkata
       - SPRINGDOC_ENABLED=true
