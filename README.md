@@ -96,7 +96,7 @@ The scan gates were first built and proved in `eai-azure-poc`, where the finding
 - [x] Stage 1 — contract-first OpenAPI, linting, breaking-change check
 - [x] Stage 1A — code maturity: types, interfaces, response models
 - [x] Stage 2 — Java tests (JUnit 5, Mockito, MockMvc, WireMock, JaCoCo)
-- [ ] Stage 3 — Python tests (pytest, rolling-back database fixture, Schemathesis)
+- [x] Stage 3 — Python tests (pytest, rolling-back database fixture, Schemathesis)
 - [ ] Stage 4 — cross-service integration tests in CI
 - [ ] Stage 5 — OAuth2/JWT resource server with Keycloak
 - [ ] Stage 6 — error model, versioning policy, downstream error mapping

@@ -145,7 +145,7 @@ components:
           type: string
           format: date-time
           description: RFC 3339 date-time. A UTC offset is mandatory.
-        kwh_value: { type: number, format: double, minimum: 0, exclusiveMinimum: true }
+        kwh_value: { type: number, format: double, minimum: 0, maximum: 1000000, exclusiveMinimum: true }
         voltage: { type: number, format: double, minimum: 100, maximum: 300, nullable: true }
     TransformationResponse:
       type: object
