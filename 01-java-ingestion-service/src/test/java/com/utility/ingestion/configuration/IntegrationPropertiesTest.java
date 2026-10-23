@@ -4,16 +4,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;   // a mini application context for tests
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class IntegrationPropertiesTest {
 
-    // withUserConfiguration: the ONLY configuration class in the mini context. AppConfiguration carries
+    // Binds ONLY IntegrationProperties. AppConfiguration also registers SecurityProperties (Stage 5), whose required
+    // settings are not present in this miniature context; using it would make every start-up fail, and the tests
+    // that expect a failure would pass for the wrong reason.
+    @EnableConfigurationProperties(IntegrationProperties.class)
+    static class Binding {
+    }
+    
+    // withUserConfiguration: the ONLY configuration class in the mini context. Binding carries
     // @EnableConfigurationProperties(IntegrationProperties.class), which is what binds and validates the record.
     // The runner is immutable: each withPropertyValues(...) returns a new, adjusted runner.
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(AppConfiguration.class);
+            .withUserConfiguration(Binding.class);
 
     @Test
     void bothSettingsBindFromTheirPropertyNames() {                               // T16

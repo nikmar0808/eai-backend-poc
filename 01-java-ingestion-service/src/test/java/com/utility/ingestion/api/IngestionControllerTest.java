@@ -14,6 +14,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.HttpClientErrorException;
 
+import com.utility.ingestion.configuration.SecurityConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.test.context.support.WithMockUser;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -27,6 +32,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(IngestionController.class)
+// The slice does not scan @Configuration classes, so the real rules are imported explicitly: these tests then run
+// behind the same security as production, and fail if the scope is not supplied.
+@Import(SecurityConfiguration.class)
+// Every test in the class acts as an authenticated caller holding the ingest scope. (@WithMockUser puts an
+// Authentication with these authorities into the security context of each test; the rules of S01 to S09 are tested
+// in their own class.)
+@WithMockUser(authorities = "SCOPE_ingest.write")
 class IngestionControllerTest {
 
     private static final String URL = "/api/v1/ingest/bulk";
@@ -36,6 +48,10 @@ class IngestionControllerTest {
 
     @MockitoBean
     private IngestionService ingestionService;
+
+    @MockitoBean                     // the resource-server configuration requires a JwtDecoder bean; its behaviour is not used here
+    private JwtDecoder jwtDecoder;
+
 
     @Test
     void aValidRequestIsPassedToTheServiceAndTheResponseIsReturnedAsJson() throws Exception {

@@ -17,7 +17,8 @@ def test_both_health_endpoints_report_up(gateway, validator):
 # E05
 def test_a_valid_request_through_the_gateway_is_summarised_and_stored(gateway, validator, auth, db):
     meter = f"{METER_PREFIX}-A"
-    # Stage 5 adds a bearer token to this call. Until then the gateway has no caller authentication (known limitation).
+
+    # The `gateway` fixture adds the bearer token (Stage 5); this call needs no extra code for it.
     response = gateway.post("/api/v1/ingest/bulk", json=valid_body(meter))
 
     assert response.status_code == 200
