@@ -21,6 +21,11 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# Apply Alpine's security updates on top of the base image. The base image (eclipse-temurin:21-jre-alpine) is rebuilt
+# by its maintainers only every few weeks; a fix published by Alpine in between (here brotli-libs, CVE-2026-111497)
+# would otherwise fail image-scan until then. --no-cache: download the package index, use it, keep nothing.
+RUN apk upgrade --no-cache
+
 # Create a non-root user to run the application for security best practices
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
