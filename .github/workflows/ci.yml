@@ -202,15 +202,20 @@ jobs:
           set -e                            # stop at the first failing command
           PW=$(openssl rand -hex 16)        # 32 random hex characters
           TOKEN=$(openssl rand -hex 24)     # 48 random hex characters
+          KCADMIN=$(openssl rand -hex 16)   # Keycloak's bootstrap admin password (never used by a test)
+          KCSECRET=$(openssl rand -hex 24)  # the shared client secret of the three realm clients (5.3)
           echo "::add-mask::$PW"            # replace these values with *** in every later log line
           echo "::add-mask::$TOKEN"
-          printf 'POSTGRES_PASSWORD=%s\nAPI_SECURITY_TOKEN=%s\n' "$PW" "$TOKEN" > .env    # read by docker compose
-          echo "POSTGRES_PASSWORD=$PW" >> "$GITHUB_ENV"        # make the same values visible to later steps:
-          echo "API_SECURITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"    # the test process and the Schemathesis commands
+          echo "::add-mask::$KCADMIN"
+          echo "::add-mask::$KCSECRET"
+          printf 'POSTGRES_PASSWORD=%s\nAPI_SECURITY_TOKEN=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\nKEYCLOAK_CLIENT_SECRET=%s\n' "$PW" "$TOKEN" "$KCADMIN" "$KCSECRET" > .env
+          echo "POSTGRES_PASSWORD=$PW" >> "$GITHUB_ENV"              # visible to later steps: the test process and
+          echo "API_SECURITY_TOKEN=$TOKEN" >> "$GITHUB_ENV"          # the Schemathesis and token steps
+          echo "KEYCLOAK_CLIENT_SECRET=$KCSECRET" >> "$GITHUB_ENV"
       - name: Start the stack and wait until every service is healthy
         run: |
           docker compose version
-          docker compose -f docker-compose.dev.yml up -d --build --wait --wait-timeout 300
+          docker compose -f docker-compose.dev.yml -f docker-compose.security.yml up -d --build --wait --wait-timeout 300
       - uses: actions/setup-python@v5       # a Python for the test process (the services run in containers)
         with:
           python-version: "3.14"
@@ -229,17 +234,26 @@ jobs:
           docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
           run /w/docs/api/validator.openapi.yaml --url http://127.0.0.1:8082
           -H "X-EAI-TOKEN: $API_SECURITY_TOKEN" --checks all --continue-on-failure
+      # The gateway contract now requires a bearer token (5.14). A step of its own, so that the token is fetched just
+      # before the run that needs it (tokens live 300 s; the run takes about ten), masked, and passed on through
+      # GITHUB_ENV. Advisory like the run it serves: if Keycloak fails here, the e2e tests above have already failed.
+      - name: Token for the gateway contract run (advisory)
+        continue-on-error: true
+        run: |
+          GW_TOKEN=$(curl -sS -d grant_type=client_credentials -d client_id=ingest-client -d "client_secret=$KEYCLOAK_CLIENT_SECRET" http://127.0.0.1:8180/realms/eai/protocol/openid-connect/token | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+          echo "::add-mask::$GW_TOKEN"
+          echo "GW_TOKEN=$GW_TOKEN" >> "$GITHUB_ENV"
       - name: Schemathesis against the gateway contract (advisory)
         continue-on-error: true
         run: >
           docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
           run /w/docs/api/gateway.openapi.yaml --url http://127.0.0.1:8081
-          --checks all --continue-on-failure
+          -H "Authorization: Bearer $GW_TOKEN" --checks all --continue-on-failure
       - name: Service logs (on failure)
         if: failure()                        # only after an earlier, non-advisory step failed
         run: |
-          docker compose -f docker-compose.dev.yml ps -a
-          docker compose -f docker-compose.dev.yml logs --no-color --tail 200
+          docker compose -f docker-compose.dev.yml -f docker-compose.security.yml ps -a
+          docker compose -f docker-compose.dev.yml -f docker-compose.security.yml logs --no-color --tail 200
       - name: Tear the stack down
         if: always()                         # even after a failure or a cancellation
-        run: docker compose -f docker-compose.dev.yml down -v
+        run: docker compose -f docker-compose.dev.yml -f docker-compose.security.yml down -v
