@@ -16,6 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 import java.time.Duration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -50,14 +53,19 @@ class IngestionWiringTest {
     @Autowired
     private TestRestTemplate rest;
 
+    @MockitoBean                     // replaces the real decoder (which would call Keycloak) with a mock
+    private JwtDecoder jwtDecoder;
+
     @BeforeEach
     void resetStubs() {
         python.resetAll();
+        TestJwt.acceptTheTestToken(jwtDecoder);     // a @MockitoBean is reset after each test, so stub it before each one
     }
 
     private static HttpEntity<String> json(String body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(TestJwt.TOKEN_WITH_SCOPE);     // Authorization: Bearer test-token-with-ingest-scope
         return new HttpEntity<>(body, headers);
     }
 

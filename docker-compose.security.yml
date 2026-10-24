@@ -1,0 +1,46 @@
+# Layered over docker-compose.dev.yml:  docker compose -f docker-compose.dev.yml -f docker-compose.security.yml ...
+# Compose merges the files: services with the same name are combined, new services are added.
+# Values in ${...} come from the .env file in the repository root, which Compose reads by itself.
+services:
+  keycloak:
+    # Pin the version, so the realm file and the health check keep working. Check that the tag exists on quay.io
+    # before the first pull (the 26.x series was current when this was written).
+    image: quay.io/keycloak/keycloak:26.6.2
+    # start-dev: development mode (HTTP allowed, embedded database). --import-realm: load /opt/keycloak/data/import/*.json.
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # The administrator account of the console, created on the first start (variable names of Keycloak 26).
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set in .env}
+      # The name Keycloak puts into every token as its issuer (A4), whichever address a caller used. Fixed, so it
+      # does not depend on who asked: the host calls 127.0.0.1:8180, the gateway calls keycloak:8080, and both get
+      # tokens saying http://localhost:8180/realms/eai.
+      KC_HOSTNAME: http://localhost:8180
+      # Serve /health/ready (on the management port 9000, which is not published to the host).
+      KC_HEALTH_ENABLED: "true"
+      # Read by the ${KEYCLOAK_CLIENT_SECRET} placeholder of the realm file at import.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?set in .env}
+    volumes:
+      # Read-only (ro): the container can read the realm file but cannot change the repository's copy.
+      - ./keycloak/eai-realm.json:/opt/keycloak/data/import/eai-realm.json:ro
+    # Host port 8180 (not 8080, which many other tools use) to Keycloak's 8080.
+    ports: ["8180:8080"]
+    networks: [eai-mesh]
+    healthcheck:
+      # The image has no curl or wget. Bash can open a TCP connection itself: write a minimal HTTP request to
+      # port 9000 and look for "200" in the answer. This is the form Keycloak's own documentation shows.
+      test: ["CMD", "bash", "-c", "{ printf 'HEAD /health/ready HTTP/1.0\\r\\n\\r\\n' >&0; grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s     # Keycloak needs about 30 to 60 seconds to start and import the realm
+  java-gateway:
+    environment:
+      # Merged with the base file's list by variable name. Note the TWO different Keycloak values (A4):
+      # where to FETCH keys: the container address that works inside the Compose network ...
+      - SECURITY_JWT_JWK_SET_URI=http://keycloak:8080/realms/eai/protocol/openid-connect/certs
+      # ... and what to DEMAND in the token: the name Keycloak writes into it (its KC_HOSTNAME).
+      - SECURITY_JWT_ISSUER=http://localhost:8180/realms/eai
+      - SECURITY_JWT_AUDIENCE=eai-gateway
+    # NO depends_on keycloak. The decoder fetches keys lazily, so the gateway starts and stays healthy while Keycloak
+    # is down (test E16). A start-up dependency would make an identity-provider outage a gateway outage.

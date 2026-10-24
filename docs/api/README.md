@@ -19,6 +19,39 @@ Both are written by hand and are the source of truth; the code conforms to them 
 | `readings[].voltage` | optional, 100 to 300 inclusive |
 | unknown properties | ignored |
 
+## Security (Stage 5)
+
+The gateway is an OAuth2 resource server (ADR-005). Callers are programs, so they obtain an access token from
+Keycloak with the client-credentials grant and send it as `Authorization: Bearer <token>`. The gateway verifies the
+token itself on every request; the Python service is still protected by the shared `X-EAI-TOKEN` header, which only
+the gateway sends.
+
+| Route | Who may call it | Without a valid token | Valid token, scope missing |
+|---|---|---|---|
+| `GET /health` | Anyone (Docker's health check carries no token) | 200 or 503 | 200 or 503 |
+| `POST /api/v1/ingest/bulk` | A token with the scope `ingest.write` | 401 | 403 |
+| Any other path | Any valid token (closed by default) | 401 | as the route decides |
+
+What the gateway checks, in this order:
+
+| Check | Expected value | Failure |
+|---|---|---|
+| Signature | RS256, verified with Keycloak's public keys (`/realms/eai/protocol/openid-connect/certs`) | 401 |
+| Expiry | `exp` in the future (60 s clock tolerance); tokens live 300 s | 401 |
+| Issuer (`iss`) | `http://localhost:8180/realms/eai`, character for character | 401 |
+| Audience (`aud`) | contains `eai-gateway` | 401 |
+| Scope | contains `ingest.write` (for the ingest route) | 403 |
+
+Authentication is checked before validation: an invalid body without a token is answered 401, not 400.
+
+Error bodies: a 401 carries the header `WWW-Authenticate: Bearer` (with `error="invalid_token"` when a token was sent
+and rejected); a 403 carries `WWW-Authenticate: Bearer error="insufficient_scope"`. Both bodies are JSON with
+`timestamp`, `status` and `error`.
+
+Known limits: the 401 and 403 bodies have no `details` field (deviation 10 below; Stage 6 replaces all error bodies
+with `application/problem+json`); `/health` tells an anonymous caller whether the gateway and Python are up (D27);
+the gateway-to-Python hop still uses the shared token.
+
 ## Versioning policy
 
 - `info.version` follows semantic versioning and is `0.x` until the contract is declared stable.
@@ -40,6 +73,7 @@ Both are written by hand and are the source of truth; the code conforms to them 
 | 7 | Gateway answers 502 or 504 when the downstream rejects, fails, is unreachable or times out | Answers a generic 500 | Stage 6 (*timeout half closed (configuration in Stage 1A, proved in Stage 2); the 502/504 mapping remains for Stage 6*) |
 | 8 | Readings `timestamp` is a local date-time without offset | Same (documented as it is) | POC 3 (`timestamptz`) |
 | 9 | `details` keys are field names | The keys are Java property names (meterId) — D22 | Stage 6 |
+| 10 | 401 and 403 bodies follow `ErrorResponse`, which requires `details` | The bodies carry `timestamp`, `status`, `error` only — D28 | Stage 6 |
 
 ## Conformance findings (Stage 4)
 
