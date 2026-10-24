@@ -4,9 +4,12 @@ import httpx
 import psycopg
 import pytest
 
-from support import GATEWAY_URL, METER_PREFIX, VALIDATOR_URL, database_url, wait_for_health
+from support import (
+    DISCOVERY_URL, GATEWAY_URL, METER_PREFIX, VALIDATOR_URL, ClientCredentials, database_url, wait_for_health,
+)
 
-REQUIRED_ENVIRONMENT = ("API_SECURITY_TOKEN", "POSTGRES_PASSWORD")
+
+REQUIRED_ENVIRONMENT = ("API_SECURITY_TOKEN", "POSTGRES_PASSWORD", "KEYCLOAK_CLIENT_SECRET")
 
 
 # A HOOK: pytest calls a function with exactly this name once, before collecting any test. It is how a conftest asks
@@ -26,6 +29,9 @@ def stack() -> None:
     """Fail early, and clearly, if the stack is not up (layer 2 of A6)."""
     wait_for_health(f"{GATEWAY_URL}/health")
     wait_for_health(f"{VALIDATOR_URL}/health")
+    # Keycloak is not a dependency of the gateway's start-up (5.11), so `up --wait` guarantees it is HEALTHY but this
+    # line makes the suite say so in its own words when it is not. Its realm answers only after the import has finished.
+    wait_for_health(DISCOVERY_URL)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -39,9 +45,15 @@ def remove_test_rows(stack):       # naming `stack` makes pytest build it first
 
 @pytest.fixture(scope="session")
 def gateway():
-    # One client for the run: it reuses connections. base_url lets tests write only the path. timeout=15 is longer
-    # than the gateway's own timeouts to Python (Stage 1A), so a slow downstream shows as the gateway's error, not as
-    # this client giving up first.
+    # The default caller of the suite: client "ingest-client", which holds the scope ingest.write. auth= makes every
+    # request carry a bearer token that is renewed automatically (support.ClientCredentials).
+    with httpx.Client(base_url=GATEWAY_URL, timeout=15.0, auth=ClientCredentials("ingest-client")) as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
+def anonymous_gateway():
+    # The same address with no credentials at all, for the tests that prove the door is shut (E10, E11, E15).
     with httpx.Client(base_url=GATEWAY_URL, timeout=15.0) as client:
         yield client
 

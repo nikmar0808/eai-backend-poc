@@ -1,4 +1,6 @@
 import os
+import base64
+import json
 import subprocess
 import time
 import uuid
@@ -9,7 +11,9 @@ import httpx
 # Path(__file__) is this file; resolve() makes it absolute; parents[1] is the folder ABOVE e2e/, the repository root.
 ROOT = Path(__file__).resolve().parents[1]
 REQUEST_DIR = ROOT / "docs" / "comprehension" / "requests"   # the nine request files of Stage 0B
-COMPOSE_FILE = ROOT / "docker-compose.dev.yml"
+# From Stage 5 the stack is the base file plus the security overlay (Keycloak, and the gateway's token settings).
+COMPOSE_FILES = [ROOT / "docker-compose.dev.yml", ROOT / "docker-compose.security.yml"]
+
 
 # Overridable from the shell, so that the same suite can aim at a stack on other ports (the compose file has
 # commented-out variables for host ports that collide). The defaults are the compose file's published ports.
@@ -20,6 +24,17 @@ COMPOSE_FILE = ROOT / "docker-compose.dev.yml"
 GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://127.0.0.1:8081")
 VALIDATOR_URL = os.environ.get("VALIDATOR_URL", "http://127.0.0.1:8082")
 POSTGRES_PORT = os.environ.get("POSTGRES_HOST_PORT", "5432")
+
+# Where the test process CALLS Keycloak: 127.0.0.1, for the reason measured in Stage 4, 4.5.2 (a Python client given
+# "localhost" on Windows loses time on ::1 for every new connection).
+KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL", "http://127.0.0.1:8180")
+TOKEN_URL = f"{KEYCLOAK_URL}/realms/eai/protocol/openid-connect/token"
+DISCOVERY_URL = f"{KEYCLOAK_URL}/realms/eai/.well-known/openid-configuration"   # answers 200 once the realm is live
+
+# What every token SAYS its issuer is, whichever address it was fetched through: the name Keycloak was told to
+# publish (KC_HOSTNAME in docker-compose.security.yml) plus the realm path. A name to compare, not an address to call
+# (A4). The gateway demands exactly this text (SECURITY_JWT_ISSUER).
+ISSUER = "http://localhost:8180/realms/eai"
 
 JSON_HEADERS = {"Content-Type": "application/json"}
 
@@ -72,10 +87,53 @@ def wait_for_health(url: str, expected_status: int = 200, timeout: float = 120.0
 
 
 def compose(*args: str) -> None:
-    """Run `docker compose -f docker-compose.dev.yml <args>` from the repository root."""
+    """Run `docker compose -f <base> -f <overlay> <args>` from the repository root."""
+    files = [part for path in COMPOSE_FILES for part in ("-f", str(path))]     # ["-f", "a.yml", "-f", "b.yml"]
     result = subprocess.run(
-        ["docker", "compose", "-f", str(COMPOSE_FILE), *args],
+        ["docker", "compose", *files, *args],
         cwd=ROOT, capture_output=True, text=True,     # capture stdout and stderr as text, so a failure can print them
     )
     if result.returncode != 0:
         raise AssertionError(f"docker compose {' '.join(args)} failed:\n{result.stdout}\n{result.stderr}")
+
+
+def fetch_token(client_id: str) -> tuple[str, float]:
+    """Ask Keycloak for an access token with the client-credentials grant. Returns (token text, seconds it lives)."""
+    response = httpx.post(
+        TOKEN_URL,
+        # data= sends a form (application/x-www-form-urlencoded), which is what a token endpoint expects.
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": os.environ["KEYCLOAK_CLIENT_SECRET"],     # the shared dev secret of .env (5.2)
+        },
+        timeout=10.0,
+    )
+    response.raise_for_status()           # a wrong secret is a 401 here, with a clear message, not a mystery later
+    body = response.json()
+    return body["access_token"], float(body["expires_in"])
+
+
+def token_claims(token: str) -> dict:
+    """The payload of a JWT as a dictionary. It only DECODES; it does not verify anything (the test needs to read it)."""
+    payload = token.split(".")[1]                         # header.payload.signature
+    payload += "=" * (-len(payload) % 4)                  # base64url text is stored without '=' padding; restore it
+    return json.loads(base64.urlsafe_b64decode(payload))
+
+
+class ClientCredentials(httpx.Auth):
+    """Adds `Authorization: Bearer <token>` to every request, fetching and renewing the token as needed."""
+
+    def __init__(self, client_id: str) -> None:
+        self.client_id = client_id
+        self._token = ""
+        self._renew_at = 0.0
+
+    def auth_flow(self, request: httpx.Request):
+        # Renew 30 seconds early so that a request never leaves with a token that expires in transit.
+        if time.monotonic() >= self._renew_at:
+            token, lifetime = fetch_token(self.client_id)
+            self._token = token
+            self._renew_at = time.monotonic() + lifetime - 30
+        request.headers["Authorization"] = f"Bearer {self._token}"
+        yield request          # httpx sends the request when the generator yields it

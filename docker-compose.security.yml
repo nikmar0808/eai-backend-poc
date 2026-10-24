@@ -34,3 +34,13 @@ services:
       timeout: 5s
       retries: 12
       start_period: 60s     # Keycloak needs about 30 to 60 seconds to start and import the realm
+  java-gateway:
+    environment:
+      # Merged with the base file's list by variable name. Note the TWO different Keycloak values (A4):
+      # where to FETCH keys: the container address that works inside the Compose network ...
+      - SECURITY_JWT_JWK_SET_URI=http://keycloak:8080/realms/eai/protocol/openid-connect/certs
+      # ... and what to DEMAND in the token: the name Keycloak writes into it (its KC_HOSTNAME).
+      - SECURITY_JWT_ISSUER=http://localhost:8180/realms/eai
+      - SECURITY_JWT_AUDIENCE=eai-gateway
+    # NO depends_on keycloak. The decoder fetches keys lazily, so the gateway starts and stays healthy while Keycloak
+    # is down (test E16). A start-up dependency would make an identity-provider outage a gateway outage.

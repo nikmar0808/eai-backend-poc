@@ -14,6 +14,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
 import java.time.Duration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
@@ -42,6 +46,14 @@ class DownstreamTimeoutTest {
     @LocalServerPort
     private int port;
 
+    @MockitoBean                     // replaces the real decoder (which would call Keycloak) with a mock
+    private JwtDecoder jwtDecoder;
+
+    @BeforeEach
+    void acceptTheTestToken() {
+        TestJwt.acceptTheTestToken(jwtDecoder);
+    }
+
     /**
      * The one-second property above applies to EVERY client Spring Boot configures in this context, including the
      * auto-configured TestRestTemplate. That client would give up at the same moment as the gateway. The test's own
@@ -59,6 +71,7 @@ class DownstreamTimeoutTest {
                 .willReturn(okJson(TestData.PYTHON_RESPONSE_JSON).withFixedDelay(6000)));
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(TestJwt.TOKEN_WITH_SCOPE);        
         TestRestTemplate rest = patientClient();
 
         // The gateway's own read timeout is one second, so it must answer well inside four seconds. If the

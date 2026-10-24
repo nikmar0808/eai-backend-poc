@@ -50,6 +50,19 @@
             <artifactId>wiremock-standalone</artifactId>
             <version>3.13.2</version>
             <scope>test</scope>
+        </dependency>
+        <!-- Brings Spring Security, its OAuth2 resource-server filters and the Nimbus library that parses and verifies
+             JWTs. The version is managed by the Spring Boot parent, so none is written here. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <!-- Test support only: the jwt() request post-processor and @WithMockUser for MockMvc (the "scope: test" keeps it
+             out of the application jar and the image). -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
         </dependency>        
     </dependencies>
 
