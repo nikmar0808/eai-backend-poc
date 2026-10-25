@@ -2,6 +2,7 @@ package com.utility.ingestion.api;
 
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.utility.ingestion.configuration.JsonRequestRejectedHandler;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -101,6 +103,19 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.BAD_GATEWAY, "python-validator could not be reached or gave no usable answer.", request);
     }
 
+    // ---- 400: Spring Security's firewall refused a header (finding D44) --------------------------------------------
+
+    /**
+     * The firewall checks a header's value when the application first reads it. Reading the JSON body copies every
+     * header, so a header with a disallowed character is rejected inside Spring MVC and arrives here. Without this
+     * handler it fell to handleUnexpected and became a 500. The exception message is not used: it quotes the value.
+     */
+    @ExceptionHandler(RequestRejectedException.class)
+    public ProblemDetail handleRequestRejected(RequestRejectedException exception, HttpServletRequest request) {
+        log.warn("Request rejected by the firewall; answering 400");
+        return problem(HttpStatus.BAD_REQUEST, JsonRequestRejectedHandler.REJECTED_DETAIL, request);
+    }
+    
     // ---- 500: anything else ----------------------------------------------------------------------------------------
 
     @ExceptionHandler(Exception.class)

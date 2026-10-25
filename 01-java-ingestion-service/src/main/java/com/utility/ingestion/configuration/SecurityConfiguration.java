@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.firewall.RequestRejectedHandler;
 
 @Configuration
 @EnableWebSecurity     // switches on Spring Security's servlet filter in front of Spring MVC
@@ -48,5 +49,11 @@ public class SecurityConfiguration {
                 .authenticationEntryPoint(new JsonAuthenticationEntryPoint())
                 .accessDeniedHandler(new JsonAccessDeniedHandler()));
         return http.build();
+    }
+
+    /** Firewall rejections in the URL, before Spring MVC runs, get the same 400 problem body (finding D44). */
+    @Bean
+    public RequestRejectedHandler requestRejectedHandler() {
+        return new JsonRequestRejectedHandler();
     }
 }

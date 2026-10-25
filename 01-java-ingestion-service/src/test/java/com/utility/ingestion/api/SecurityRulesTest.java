@@ -134,4 +134,15 @@ class SecurityRulesTest {
         // The scope rule is written for POST. An authenticated GET passes security and Spring MVC says "not allowed".
         mockMvc.perform(get(URL).with(caller(INGEST))).andExpect(status().isMethodNotAllowed());
     }
+
+    @Test
+    void aUrlTheFirewallRejectsGives400AsProblemDetails() throws Exception {                   // C15, D44 (URL half)
+        // StrictHttpFirewall refuses a semicolon in the path before any filter or controller runs; the
+        // RequestRejectedHandler bean of SecurityConfiguration writes the answer.
+        mockMvc.perform(post(URL + ";x=1").contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
+                        .with(caller(INGEST)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+        verifyNoInteractions(ingestionService);
+    }
 }

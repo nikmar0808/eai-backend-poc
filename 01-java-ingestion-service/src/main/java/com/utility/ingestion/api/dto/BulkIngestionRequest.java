@@ -14,17 +14,17 @@ public record BulkIngestionRequest(
         @JsonProperty("meter_id")
         @NotBlank(message = "Meter ID cannot be blank")
         @Size(min = 5, max = 20, message = "Meter ID must be between 5 and 20 characters")
-        // No control characters (U+0000 to U+001F, U+007F): PostgreSQL text cannot store NUL (finding D39).
-        @Pattern(regexp = "^[^\\x00-\\x1F\\x7F]+$", message = "Meter ID must not contain control characters")
+        // Printable ASCII only, no spaces (findings D39, D45): no control characters (PostgreSQL text cannot store NUL),
+        // and one character is one UTF-16 code unit, so @Size, the contract's maxLength and Python's len() agree.
+        @Pattern(regexp = "^[\\x21-\\x7E]+$", message = "Meter ID must contain printable ASCII characters only, no spaces")
         String meterId,
 
         @JsonProperty("grid_zone")
         @NotBlank(message = "Grid Zone cannot be blank")
         @Size(max = 50, message = "Grid Zone must be at most 50 characters")
-        // At least one character that is neither whitespace nor a control character. A plain \S would not do: NUL is
-        // not whitespace, so \S accepts it (D39).
-        @Pattern(regexp = "^[^\\x00-\\x1F\\x7F]*[^\\s\\x00-\\x1F\\x7F][^\\x00-\\x1F\\x7F]*$",
-                message = "Grid Zone must contain a visible character and no control characters")
+        // Printable ASCII (spaces allowed) with at least one visible character (findings D39, D45).
+        @Pattern(regexp = "^[\\x20-\\x7E]*[\\x21-\\x7E][\\x20-\\x7E]*$",
+                message = "Grid Zone must contain printable ASCII characters only, at least one of them visible")
         String gridZone,
 
         @NotEmpty(message = "Readings array cannot be empty")
