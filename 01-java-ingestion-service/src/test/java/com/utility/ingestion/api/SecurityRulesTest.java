@@ -61,9 +61,9 @@ class SecurityRulesTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string("WWW-Authenticate", startsWith("Bearer")))       // the standard challenge
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.error").value("Unauthorized"));
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
         verifyNoInteractions(ingestionService);        // nothing reached the controller's collaborator
     }
 
@@ -74,7 +74,7 @@ class SecurityRulesTest {
                 .andExpect(status().isForbidden())
                 .andExpect(header().string("WWW-Authenticate", containsString("insufficient_scope")))
                 .andExpect(jsonPath("$.status").value(403))
-                .andExpect(jsonPath("$.error").value("Forbidden"));
+                .andExpect(jsonPath("$.title").value("Forbidden"));
         verifyNoInteractions(ingestionService);
     }
 
@@ -93,7 +93,7 @@ class SecurityRulesTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(INVALID_JSON)
                         .with(caller(INGEST)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Validation failed"));
+                .andExpect(jsonPath("$.errors").isArray());
         verifyNoInteractions(ingestionService);
     }
 

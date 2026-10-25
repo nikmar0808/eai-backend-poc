@@ -4,6 +4,9 @@ import com.utility.ingestion.TestData;
 import com.utility.ingestion.api.dto.BulkIngestionRequest;
 import com.utility.ingestion.service.IngestionService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -13,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 import com.utility.ingestion.configuration.SecurityConfiguration;
 import org.springframework.context.annotation.Import;
@@ -30,6 +34,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
+
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
+
 
 @WebMvcTest(IngestionController.class)
 // The slice does not scan @Configuration classes, so the real rules are imported explicitly: these tests then run
@@ -80,12 +93,12 @@ class IngestionControllerTest {
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(invalid))
                 .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.error").value("Validation failed"))
-                .andExpect(jsonPath("$.timestamp").exists())
-                // Finding D22: the keys are Java property names, not the JSON names the client sent (Stage 6 flips this).
-                .andExpect(jsonPath("$.details.meterId").exists())
-                .andExpect(jsonPath("$.details['readings[0].voltage']").exists());
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.instance").value("/api/v1/ingest/bulk"))
+                // Finding D22 closed: the fields are named as the client sent them.
+                .andExpect(jsonPath("$.errors[*].field", hasItems("meter_id", "readings[0].voltage")));
 
         verify(ingestionService, never()).ingest(any());
     }
@@ -93,7 +106,9 @@ class IngestionControllerTest {
     @Test
     void malformedJsonIsRejectedWith400() throws Exception {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content("{\"meter_id\": "))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))   // D35 closed
+                .andExpect(jsonPath("$.detail").value("The request body is not well-formed JSON."));
         verify(ingestionService, never()).ingest(any());
     }
 
@@ -109,7 +124,8 @@ class IngestionControllerTest {
     @Test
     void aBodyThatIsNotJsonIsRejectedWith415() throws Exception {
         mockMvc.perform(post(URL).contentType(MediaType.TEXT_PLAIN).content(TestData.VALID_JSON))
-                .andExpect(status().isUnsupportedMediaType());
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @Test
@@ -118,16 +134,117 @@ class IngestionControllerTest {
     }
 
     @Test
-    void documentsD3_aFailureOfTheDownstreamHasNoHandler() {
-        // Finding D3 (downstream half): ApiExceptionHandler handles validation errors only. An exception from the
-        // downstream call therefore propagates unhandled; in the running application Spring turns it into a generic
-        // 500. Stage 6 adds a handler that answers 502, and this test is then changed to expect that.
+    void aRejectionByTheDownstreamGives502WithoutItsBody() throws Exception {                 // C08, D3
+        // A 422 body as Python sends it: it echoes the client's input. A recognisable value is planted in it, and the
+        // test asserts that it never reaches the client (A7).
+        byte[] pythonBody = "{\"detail\":[{\"input\":\"SECRET-INPUT-VALUE\"}]}".getBytes(StandardCharsets.UTF_8);
         when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
                 HttpClientErrorException.create(HttpStatus.UNPROCESSABLE_ENTITY, "Unprocessable",
-                        HttpHeaders.EMPTY, new byte[0], null));
+                        HttpHeaders.EMPTY, pythonBody, StandardCharsets.UTF_8));
 
-        assertThatThrownBy(() -> mockMvc.perform(
-                post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)))
-                .hasRootCauseInstanceOf(HttpClientErrorException.class);
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
+                .andExpect(status().isBadGateway())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Bad Gateway"))
+                .andExpect(content().string(not(containsString("SECRET-INPUT-VALUE"))));
+    }
+
+    @Test
+    void aNumberAsTimestampIsRejectedWith400AndNamesTheField() throws Exception {              // C01, D29
+        String numeric = TestData.VALID_JSON.replace("\"2026-10-09T00:00:00Z\"", "0");
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(numeric))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors[0].field").value("readings[0].timestamp"));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @ParameterizedTest(name = "offset {0} is refused")
+    @ValueSource(strings = {"+14:30", "-15:00", "+19:00"})
+    void anOffsetBeyondFourteenHoursIsRejectedWith400(String offset) throws Exception {        // C02, D37 (3)
+        // +14:30 and -15:00 are valid for Java and for RFC 3339; +19:00 is beyond what Java can even represent.
+        String body = TestData.VALID_JSON.replace("2026-10-09T00:00:00Z", "2026-10-09T00:00:00" + offset);
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("readings[0].timestamp"));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @Test
+    void anOffsetOfExactlyFourteenHoursIsAccepted() throws Exception {                        // C07, boundary
+        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenReturn(TestData.response());
+        String body = TestData.VALID_JSON.replace("2026-10-09T00:00:00Z", "2026-10-09T00:00:00+14:00");
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void aNullReadingIsRejectedWith400() throws Exception {                                    // C03, D36
+        String body = "{\"meter_id\":\"MTR-POC2-001\",\"grid_zone\":\"ZONE-A\",\"readings\":[null]}";
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItems("readings[0]")));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @ParameterizedTest(name = "a control character in {0} is refused")
+    @ValueSource(strings = {"grid_zone", "meter_id"})
+    void aControlCharacterInAnIdentifierIsRejectedWith400(String field) throws Exception {     // C04, D39 (2)
+        // In Java source "\\u0000" is backslash-u-0000, the JSON escape for NUL; Jackson turns it into U+0000.
+        String body = field.equals("grid_zone")
+                ? TestData.VALID_JSON.replace("\"ZONE-A\"", "\"ZONE\\u0000A\"")
+                : TestData.VALID_JSON.replace("\"MTR-POC2-001\"", "\"MTR\\u0001POC2\"");
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItems(field)));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @Test
+    void aDownstreamTimeoutGives504() throws Exception {                                       // C05, D3
+        // What RestClient throws when the read timeout of Stage 1A expires.
+        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
+                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out")));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
+                .andExpect(status().isGatewayTimeout())
+                .andExpect(jsonPath("$.title").value("Gateway Timeout"));
+    }
+
+    @Test
+    void anUnreachableDownstreamGives502() throws Exception {                                  // C06, D3
+        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
+                new ResourceAccessException("I/O error", new ConnectException("Connection refused")));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
+                .andExpect(status().isBadGateway());
+    }
+
+    @Test
+    void anUnexpectedErrorGives500WithoutItsMessage() throws Exception {                       // C11, A6 last row, A7
+        // A failure nobody planned for. Its message is planted with a recognisable value, which must not reach the client.
+        when(ingestionService.ingest(any(BulkIngestionRequest.class)))
+                .thenThrow(new IllegalStateException("SECRET-INTERNAL-STATE"));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
+                .andExpect(status().isInternalServerError())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("An unexpected error occurred."))
+                .andExpect(content().string(not(containsString("SECRET-INTERNAL-STATE"))));
+    }
+
+    @Test
+    void aMissingBodyIsRejectedWith400AsProblemDetails() throws Exception {                    // C12, D35
+        // No body at all: Spring reports "Required request body is missing" with no cause, the third branch.
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value("The request body could not be read."));
+        verify(ingestionService, never()).ingest(any());
     }
 }

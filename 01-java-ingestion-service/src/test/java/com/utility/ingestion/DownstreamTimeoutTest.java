@@ -9,6 +9,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -79,7 +80,7 @@ class DownstreamTimeoutTest {
         ResponseEntity<String> response = assertTimeoutPreemptively(Duration.ofSeconds(4),
                 () -> rest.postForEntity("/api/v1/ingest/bulk", new HttpEntity<>(TestData.VALID_JSON, headers), String.class));
 
-        // Until Stage 6 maps it to 504 (see the contract), a timeout surfaces as the generic 500.
-        assertThat(response.getStatusCode().is5xxServerError()).isTrue();
+        // The contract's answer for a downstream that does not answer in time.
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
     }
 }
