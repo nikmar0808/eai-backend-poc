@@ -38,14 +38,19 @@ def test_the_gateway_reports_down_while_a_dependency_is_stopped_and_recovers(res
 
 
 # E09
-def test_documents_D3_a_stopped_downstream_gives_the_client_a_generic_500(gateway, restore_stack):
-    # Finding D3 (downstream half). The contract says 502; Stage 6 implements it and flips this assertion.
+def test_a_stopped_downstream_gives_the_client_502_as_problem_details(gateway, restore_stack):
+    # Finding D3 closed in Stage 6: the gateway answers for its downstream with 502, in the one error format.
     compose("stop", "python-validator")
     wait_for_health(f"{GATEWAY_URL}/health", 503, timeout=60)
 
     response = gateway.post("/api/v1/ingest/bulk", json=valid_body(f"{METER_PREFIX}-X"))
 
-    assert response.status_code == 500
+    # A stopped container is refused (502), unknown (502) or silent until the connect timeout (504), depending on the
+    # network and on the JVM's DNS cache: on Docker Desktop for Windows the gateway still holds the old address and
+    # its connection attempt times out. Either answer is the gateway answering for its downstream; 500 is not.
+    assert response.status_code in (502, 504)
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json()["title"] in ("Bad Gateway", "Gateway Timeout")
 
 
 # E16

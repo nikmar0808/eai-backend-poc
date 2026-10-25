@@ -56,3 +56,25 @@ Taken on 2026-10-11 from commit `short SHA of develop - 7182d35a377c5cbdac928e57
 Intended changes against the baseline: row 03 Java 500 to 400 (Java now enforces the voltage range); rows 04 to 06
 Python 200 to 422 (Python now enforces the offset, the minimum number of readings and the non-blank zone). The two
 services now agree on accept or reject for every row; the status codes differ by design until Stage 6.
+
+## After Stage 6 (25 October 2026)
+
+Statuses with both services after Stage 6. Rows 01 to 09 are unchanged; rows 10 to 13 are new and each guards one rule
+that both services now enforce. The gateway answers 400 and Python 422 for every rejection; both bodies are
+`application/problem+json`.
+
+| File | Gateway | Python | Rule |
+|---|---|---|---|
+| 01-valid.json | 200 | 200 | — |
+| 02-kwh-zero.json | 400 | 422 | kwh_value above 0 |
+| 03-voltage-too-low.json | 400 | 422 | voltage 100 to 300 |
+| 04-timestamp-no-offset.json | 400 | 422 | offset mandatory |
+| 05-empty-readings.json | 400 | 422 | 1 to 1000 readings |
+| 06-blank-grid-zone.json | 400 | 422 | a visible character |
+| 07-meter-id-too-short.json | 400 | 422 | 5 to 20 characters |
+| 08-malformed-json.json | 400 | 422 | well-formed JSON |
+| 09-missing-readings-field.json | 400 | 422 | readings required |
+| 10-timestamp-as-number.json | 400 | 422 | timestamp is a string (D29) |
+| 11-offset-beyond-14-hours.json | 400 | 422 | offset within +-14:00 (D37) |
+| 12-null-reading.json | 400 | 422 | no null reading (D36) |
+| 13-control-character-in-grid-zone.json | 400 | 422 | no control characters (D39) |

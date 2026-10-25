@@ -8,7 +8,7 @@
 | [004](ADR-004-contract-first-openapi.md) | contract-first APIs | Accepted |
 | [005](ADR-005-gateway-oauth2-resource-server.md) | Gateway is an OAuth2 resource server, authenticated by Keycloak-issued JWTs | Accepted |
 | [010](ADR-010-poc2-separate-repository.md) | POC 2 is carried out in a separate repository | Accepted |
+| [011](ADR-011-problem-details.md) | One error format, RFC 9457 problem details, in both services | Accepted |
 
-Numbers 005 to 007 are reserved for decisions made in this repository (JWT resource server, migration tool,
-audit store). Numbers 008 and 009 belong to `eai-azure-poc` (edge layer, Azure delivery pipeline)
-and are not copied here.
+Numbers 006 and 007 are reserved for the data layer (migration tool, audit store). Numbers 008 and 009 belong to
+`eai-azure-poc` (edge layer, Azure delivery pipeline) and are not copied here.
