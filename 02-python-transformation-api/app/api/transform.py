@@ -1,10 +1,12 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from sqlalchemy.orm import Session
 
 from app.api.authenticator import authenticate_request
+
+from app.api.errors import StorageFailure
 
 from app.database.connection import get_db_session
 from app.schemas.meter import SmartMeterPayload
@@ -58,10 +60,11 @@ def validate_and_transform_payload(
 ) -> TransformResponse:
     try:
         return store_readings(db, payload)
-    except Exception as e:
+    except Exception as error:
         db.rollback()
-        logger.error(f"Data tier exception encountered: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database persistent write failure: {str(e)}",
-        )
+        # Finding D6: a database error's text contains the SQL statement, table and column names and the values.
+        # The log gets its class name only; the client gets a fixed sentence (errors.storage_problem). "from None"
+        # also detaches the original error, so its text does not appear in a traceback either.
+        logger.error("Database write failed (%s)", type(error).__name__)
+        raise StorageFailure() from None
+
