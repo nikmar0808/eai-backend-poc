@@ -1,6 +1,7 @@
 package com.utility.ingestion.configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
@@ -33,7 +34,9 @@ final class JsonErrorWriter {
         body.put("title", status.getReasonPhrase());
         body.put("status", status.value());
         body.put("detail", detail);
-        body.put("instance", request.getRequestURI());
+        // During an error dispatch (Tomcat forwarding to /error) the path the client asked for is in this attribute.
+        Object original = request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
+        body.put("instance", original != null ? original.toString() : request.getRequestURI());
         MAPPER.writeValue(response.getWriter(), body);
     }
 }

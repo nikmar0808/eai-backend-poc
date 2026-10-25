@@ -18,7 +18,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
+import com.utility.ingestion.configuration.JsonRequestRejectedHandler;
 import com.utility.ingestion.configuration.SecurityConfiguration;
+import com.utility.ingestion.configuration.JsonStrictnessConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -47,7 +49,7 @@ import static org.hamcrest.Matchers.containsString;
 @WebMvcTest(IngestionController.class)
 // The slice does not scan @Configuration classes, so the real rules are imported explicitly: these tests then run
 // behind the same security as production, and fail if the scope is not supplied.
-@Import(SecurityConfiguration.class)
+@Import({SecurityConfiguration.class, JsonStrictnessConfiguration.class})
 // Every test in the class acts as an authenticated caller holding the ingest scope. (@WithMockUser puts an
 // Authentication with these authorities into the security context of each test; the rules of S01 to S09 are tested
 // in their own class.)
@@ -245,6 +247,52 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("The request body could not be read."));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+
+    @Test
+    void aHeaderWithAControlCharacterGives400NotAServerError() throws Exception {             // C13, D44 (header half)
+        // The firewall checks a header's value when it is first read; reading the JSON body copies every header, so the
+        // rejection happens inside Spring MVC. 0x97 is a C1 control character, built with a cast, not a Java escape.
+        String value = "note" + (char) 0x97;
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
+                        .header("X-Client-Note", value))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.detail").value(JsonRequestRejectedHandler.REJECTED_DETAIL));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @Test
+    void aNonAsciiCharacterInAnIdentifierIsRejectedWith400() throws Exception {               // C14, D45
+        // U+1F600 lies above U+FFFF: one character for JSON Schema and Python, two UTF-16 code units for @Size.
+        // Identifiers are printable ASCII, so all three agree that it is refused.
+        String emoji = new String(Character.toChars(0x1F600));
+        String body = TestData.VALID_JSON.replace("\"MTR-POC2-001\"", "\"MTR-" + emoji + "-01\"");
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[*].field", hasItems("meter_id")));
+        verify(ingestionService, never()).ingest(any());
+    }
+
+    @ParameterizedTest(name = "{0} of the wrong JSON type is refused")
+    @ValueSource(strings = {"grid_zone", "meter_id", "readings[0].kwh_value"})
+    void aValueOfTheWrongJsonTypeIsRejectedWith400(String field) throws Exception {          // C16, D48 (3)
+        // Without JsonStrictnessConfiguration, Jackson would accept all three: false and 1234567 as the text "false"
+        // and "1234567", and "12.5" as the number 12.5.
+        String body = switch (field) {
+            case "grid_zone" -> TestData.VALID_JSON.replace("\"ZONE-A\"", "false");
+            case "meter_id" -> TestData.VALID_JSON.replace("\"MTR-POC2-001\"", "1234567");
+            default -> TestData.VALID_JSON.replace("12.5", "\"12.5\"");
+        };
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors[0].field").value(field));
         verify(ingestionService, never()).ingest(any());
     }
 }

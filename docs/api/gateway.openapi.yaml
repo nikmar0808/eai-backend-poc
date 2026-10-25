@@ -53,19 +53,6 @@ paths:
         if nothing comes back in time (including a connection attempt that times out), 504.
         The caller must present a bearer token issued by the realm `eai` for the audience `eai-gateway` and carrying the
         scope `ingest.write`. No token or an invalid token gives 401; a valid token without the scope gives 403.
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: false
-          description: |
-            Reserved; implemented in a later release (finding D8). A client-chosen identifier, 1 to 64 visible ASCII
-            characters. A repeat of a request with the same key within 24 hours will return the first answer and store
-            nothing. Until then the gateway ignores the header.
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 64
-            pattern: '^[\x21-\x7E]+$'
       requestBody:
         required: true
         content:
@@ -133,14 +120,14 @@ components:
           type: string
           minLength: 5
           maxLength: 20
-          pattern: '^[^\x00-\x1F\x7F]+$'
-          description: Unique utility asset identifier. No control characters.
+          pattern: '^[\x21-\x7E]+$'
+          description: Unique utility asset identifier. Printable ASCII, no spaces.
         grid_zone:
           type: string
           minLength: 1
           maxLength: 50
-          pattern: '^[^\x00-\x1F\x7F]*[^\s\x00-\x1F\x7F][^\x00-\x1F\x7F]*$'
-          description: Regional grid zone code. At least one visible character; no control characters.
+          pattern: '^[\x20-\x7E]*[\x21-\x7E][\x20-\x7E]*$'
+          description: Regional grid zone code. Printable ASCII, at least one visible character.
         readings:
           type: array
           minItems: 1
