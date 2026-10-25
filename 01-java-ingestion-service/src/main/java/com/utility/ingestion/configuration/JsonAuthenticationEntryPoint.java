@@ -3,6 +3,8 @@ package com.utility.ingestion.configuration;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationEntryPoint;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -19,6 +21,6 @@ public class JsonAuthenticationEntryPoint implements AuthenticationEntryPoint {
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException exception) throws IOException, ServletException {
         delegate.commence(request, response, exception);
-        JsonErrorWriter.write(response, 401, "Unauthorized");
+        JsonErrorWriter.write(request, response, HttpStatus.UNAUTHORIZED, "A valid bearer token is required.");
     }
 }

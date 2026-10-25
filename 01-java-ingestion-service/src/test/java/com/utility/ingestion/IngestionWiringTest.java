@@ -10,6 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -120,25 +121,25 @@ class IngestionWiringTest {
     }
 
     @Test
-    void documentsD3_aRejectionByPythonBecomesAGeneric500() {
-        // Finding D3 (downstream half). The contract says 502; Stage 6 implements it and flips this assertion.
+    void aRejectionByPythonGives502() {
+        // Finding D3 closed: a rejection by Python is the gateway's failure, 502.
         python.stubFor(post(urlEqualTo("/api/v1/transform"))
                 .willReturn(aResponse().withStatus(422).withHeader("Content-Type", "application/json")
                         .withBody("{\"detail\":[]}")));
 
         ResponseEntity<String> response = rest.postForEntity("/api/v1/ingest/bulk", json(TestData.VALID_JSON), String.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
     }
 
     @Test
-    void documentsD3_aBrokenConnectionToPythonBecomesAGeneric500() {
+    void aBrokenConnectionToPythonGives502() {
         python.stubFor(post(urlEqualTo("/api/v1/transform"))
                 .willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
 
         ResponseEntity<String> response = rest.postForEntity("/api/v1/ingest/bulk", json(TestData.VALID_JSON), String.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
     }
 
     @Test
@@ -168,5 +169,30 @@ class IngestionWiringTest {
     @Test
     void theGeneratedApiDocumentIsNotExposedByDefault() {
         assertThat(rest.getForEntity("/v3/api-docs", String.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void aMultipartContentTypeDoesNotBreakHealth() {                                           // C09, D34
+        // A real server is needed: MockMvc does not parse multipart the way Tomcat and Spring's resolver did.
+        python.stubFor(get(urlEqualTo("/health")).willReturn(aResponse().withStatus(200)));
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, "multipart/form-data");     // no boundary: the malformed header of D34
+
+        ResponseEntity<String> response = rest.exchange("/health", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void aMultipartBodyOnTheIngestRouteGives415() {                                           // C10, D34
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, "multipart/form-data");
+        headers.setBearerAuth(TestJwt.TOKEN_WITH_SCOPE);
+
+        ResponseEntity<String> response =
+                rest.exchange("/api/v1/ingest/bulk", HttpMethod.POST, new HttpEntity<>("x", headers), String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNSUPPORTED_MEDIA_TYPE);
+        assertThat(response.getHeaders().getContentType().isCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON)).isTrue();
     }
 }

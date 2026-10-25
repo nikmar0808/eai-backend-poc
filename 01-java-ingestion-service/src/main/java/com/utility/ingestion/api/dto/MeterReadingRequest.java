@@ -1,6 +1,8 @@
 package com.utility.ingestion.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
@@ -10,6 +12,7 @@ import java.time.OffsetDateTime;
 public record MeterReadingRequest(
         @JsonProperty("timestamp")
         @NotNull(message = "Timestamp cannot be null")
+        @JsonDeserialize(using = StrictOffsetDateTimeDeserializer.class)     // strict: a string, a real offset (D29, D37)
         OffsetDateTime timestamp,
 
         @JsonProperty("kwh_value")
