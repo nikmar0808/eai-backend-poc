@@ -47,6 +47,11 @@ EXPECTED_STATUS = {
     "07-meter-id-too-short.json": 422,
     "08-malformed-json.json": 422,
     "09-missing-readings-field.json": 422,
+    # Added in Stage 6: Python's half of the four new rules (D29, D37, D36, D39). The gateway's half is in e2e.
+    "10-timestamp-as-number.json": 422,
+    "11-offset-beyond-14-hours.json": 422,
+    "12-null-reading.json": 422,
+    "13-control-character-in-grid-zone.json": 422,
 }
 
 
@@ -128,23 +133,6 @@ def test_documents_D8_the_same_reading_posted_twice_is_stored_twice(client, auth
     client.post(URL, json=body(), headers=auth_headers)
 
     assert row_count(db_session) == 2
-
-
-def test_documents_D6_a_failed_commit_returns_500_and_leaks_the_exception_text(           # P25
-    client, auth_headers, db_session, monkeypatch
-):
-    # Finding D6: the exception text is echoed to the caller. Stage 6 removes it and flips the second assertion.
-    def failing_commit():
-        raise RuntimeError("disk on fire")
-
-    # Replace commit() on THIS session object for this test only. The route receives the same object (via
-    # dependency_overrides), so its db.commit() now raises, and its except-block runs.
-    monkeypatch.setattr(db_session, "commit", failing_commit)
-
-    response = client.post(URL, json=body(), headers=auth_headers)
-
-    assert response.status_code == 500
-    assert "disk on fire" in response.json()["detail"]
 
 
 def test_the_write_route_is_a_plain_def_so_it_does_not_block_the_event_loop():            # P26

@@ -13,6 +13,7 @@ from sqlalchemy import text
 
 from app.api.transform import router as transform_router
 from app.api.readings import router as readings_router
+from app.api.errors import register_error_handlers
 
 from app.config import settings
 
@@ -60,6 +61,9 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan  # Register the lifespan context manager
 )
+
+# One error format for every route (ADR-011): problem details instead of FastAPI's default bodies.
+register_error_handlers(app)
 
 # Base health-check endpoint
 @app.get("/")

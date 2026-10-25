@@ -2,7 +2,7 @@ import pytest
 
 from support import JSON_HEADERS, METER_ID, REQUEST_DIR
 
-# (gateway status, Python status) after Stage 1A: docs/comprehension/baseline-matrix.md. The gateway answers 400 where
+# (gateway status, Python status) after Stage 6: docs/comprehension/baseline-matrix.md. The gateway answers 400 where
 # Python answers 422 (the contracts differ in status code, by design; the property tested below is the agreement).
 EXPECTED = {
     "01-valid.json": (200, 200),
@@ -14,6 +14,11 @@ EXPECTED = {
     "07-meter-id-too-short.json": (400, 422),
     "08-malformed-json.json": (400, 422),
     "09-missing-readings-field.json": (400, 422),
+    # Added in Stage 6: each file tests one rule that both services must now enforce (D29, D37, D36, D39).
+    "10-timestamp-as-number.json": (400, 422),
+    "11-offset-beyond-14-hours.json": (400, 422),
+    "12-null-reading.json": (400, 422),
+    "13-control-character-in-grid-zone.json": (400, 422),
 }
 
 
