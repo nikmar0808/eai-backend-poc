@@ -30,11 +30,11 @@ jobs:
       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       # Report "verified" (provably live) AND "unknown" (could not be checked) findings. Verified-only mode can never
       # flag a home-made token, because there is no issuer to verify it against.
-      - uses: trufflesecurity/trufflehog@v3.94.1
+      - uses: trufflesecurity/trufflehog@v3.99.7
         with: { extra_args: "--results=verified,unknown" }
       # Gitleaks: generic secret rules plus the project's own retired literals. The literals live in the repository
       # secret GITLEAKS_PROJECT_REGEX, never in the repository, and --redact keeps any finding out of this public log.
@@ -62,10 +62,10 @@ jobs:
         (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
     permissions: { contents: read, security-events: write }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Step 1: results for the Security tab. Never fails the job (exit-code 0). SARIF is a machine format and
       # prints no findings in the log, which is why the gate is a second step.
-      - uses: aquasecurity/trivy-action@0.35.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -77,10 +77,10 @@ jobs:
           format: sarif
           output: trivy-fs-results.sarif
       - if: always() && hashFiles('trivy-fs-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with: { sarif_file: trivy-fs-results.sarif }
       # Step 2: the gate. Same scan, readable table, fails the job on any remaining finding.
-      - uses: aquasecurity/trivy-action@0.35.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -98,8 +98,8 @@ jobs:
       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with: { node-version: "22" }
       # Warnings fail the job: the contract has to be clean, not merely valid.
       - run: npx --yes @stoplight/spectral-cli@6 lint --fail-severity warn docs/api/gateway.openapi.yaml docs/api/validator.openapi.yaml
@@ -112,13 +112,13 @@ jobs:
       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with: { distribution: temurin, java-version: "21", cache: maven }
       - working-directory: 01-java-ingestion-service
         run: mvn -B verify
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: 01-java-ingestion-service/target/site/jacoco
@@ -142,8 +142,8 @@ jobs:
         options: >-
           --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip                                              # reuses downloaded packages between runs
@@ -176,7 +176,7 @@ jobs:
           API_SECURITY_TOKEN: ci-only-test-token # disposable CI test value, not an actual credential
         run: pytest tests --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=92
       - if: always()                    # upload the report even when the tests or the gate failed
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-coverage-report
           path: 02-python-transformation-api/htmlcov
@@ -196,9 +196,9 @@ jobs:
           - { image: eai-java-gateway,     context: 01-java-ingestion-service }
           - { image: eai-python-validator, context: 02-python-transformation-api }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t ${{ matrix.image }}:pr ./${{ matrix.context }}
-      - uses: aquasecurity/trivy-action@0.35.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:pr
           severity: CRITICAL,HIGH
@@ -219,7 +219,7 @@ jobs:
       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')))
     steps:
-      - uses: actions/checkout@v4          # fetch the pull request's code onto the runner
+      - uses: actions/checkout@v7          # fetch the pull request's code onto the runner
       - name: Create .env with throw-away random values
         run: |
           set -e                            # stop at the first failing command
@@ -239,7 +239,7 @@ jobs:
         run: |
           docker compose version
           docker compose -f docker-compose.dev.yml -f docker-compose.security.yml up -d --build --wait --wait-timeout 300
-      - uses: actions/setup-python@v5       # a Python for the test process (the services run in containers)
+      - uses: actions/setup-python@v7       # a Python for the test process (the services run in containers)
         with:
           python-version: "3.14"
           cache: pip                         # cache downloaded packages between runs

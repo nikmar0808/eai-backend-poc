@@ -24,7 +24,7 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'breaking-change-approved') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }      # all branches and their history, so that git show can read the target branch
       - name: Read both contracts as they are on the target branch
         env:
