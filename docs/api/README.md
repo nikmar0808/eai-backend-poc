@@ -125,6 +125,7 @@ Schemathesis 4.31.1 against the gateway after Stage 6A (25 October 2026), in CI 
 | D46 | The contract constrained an `Idempotency-Key` header the gateway ignored | Closed (Stage 6): header removed until POC 3 implements it (D8) |
 | D47 | `TRACE` answers 400 problem details, not 405: Tomcat refuses the method before Spring runs | Accepted by design; production edges block `TRACE`. Excluded by name from the gateway's blocking Schemathesis run (`--exclude-checks unsupported_method`, Stage 7) |
 | D48 | A JSON boolean or number was accepted as a string, and a string as a number | Closed (Stage 6): strict JSON types in both services |
+| D52 | An empty or blank string was accepted as a missing `voltage` (found by the blocking gateway run of Stage 7, on a pull request that did not cause it) | Closed (Stage 7): refused with 400 like any other string for a number |
 
 ## CI gates on the contracts (Stage 7)
 
