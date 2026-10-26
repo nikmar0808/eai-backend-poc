@@ -26,8 +26,10 @@ because `ci.yml` pins `trivy-action@0.35.0`.
 3. Every pull request builds and scans both images (`image-scan`, ci.yml); `nightly-scan.yml` rebuilds them from
    `main` with `--pull` and scans them every night with the same rules, so an advisory is seen within a day even when
    nobody opens a pull request.
-4. Dependabot proposes base-image tags (major versions ignored), Maven and pip dependencies and actions weekly, as
-   pull requests into `develop` that pass the same gates as any other change.
+4. Dependabot proposes minor and patch updates of base-image tags, Maven and pip dependencies and actions weekly, as
+   pull requests into `develop` that pass the same gates as any other change. Major versions are not proposed (each
+   is a decision with its own work item), and two sets are updated by hand: the Azure Monitor tracing packages, which
+   must move together, and the Maven build image, whose tag carries the Java version after Maven's (D53, Stage 7).
 5. An accepted finding is an entry in `.trivyignore` with an expiry date and a comment naming the package. The file is
    re-triaged when an entry expires and at the end of each POC (D21, Stage 7).
 
