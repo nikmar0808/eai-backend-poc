@@ -23,8 +23,8 @@ jobs:
   nightly-fs-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@0.35.0
+      - uses: actions/checkout@v7
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -45,10 +45,10 @@ jobs:
           - { image: eai-java-gateway,     context: 01-java-ingestion-service }
           - { image: eai-python-validator, context: 02-python-transformation-api }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # --pull: fetch the base image's tag afresh, so a base image rebuilt by its maintainers is what gets scanned.
       - run: docker build --pull -t ${{ matrix.image }}:nightly ./${{ matrix.context }}
-      - uses: aquasecurity/trivy-action@0.35.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:nightly
           severity: CRITICAL,HIGH
