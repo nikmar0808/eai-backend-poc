@@ -106,7 +106,7 @@ paths:
           in: query
           required: false
           description: Maximum number of readings to return.
-          schema: { type: integer, minimum: 1, maximum: 200, default: 20 }
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
       responses:
         "200":
           description: The readings, newest first.
