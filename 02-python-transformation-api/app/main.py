@@ -38,7 +38,6 @@ if not any(type(h) is logging.StreamHandler for h in root_logger.handlers):
     root_logger.addHandler(console_handler)
 
 logger = logging.getLogger(__name__)
-_ratchet_proof: int = "four"  # Stage 7, proof 2: a fourth mypy error (to be reverted)
 
 # --- LIFESPAN EVENT HANDLER ---
 @asynccontextmanager
