@@ -8,7 +8,10 @@ name: CI
 #   push to develop or feature/**, and every pull request -> scans + build/test of both services
 #   pull_request                                           -> image-scan: build and Trivy-scan each image, push nothing
 # Added in POC 2: contract-lint (Stage 1)
-# Added in POC 2: e2e (Stage 4): the real stack, the cross-service suite, Schemathesis (advisory until Stage 7).
+# Added in POC 2: e2e (Stage 4): the real stack, the cross-service suite, Schemathesis (blocking since Stage 7).
+# Added in POC 2, Stage 7: ruff and mypy (a ratchet) in python-build-test. Two more workflows hold the other Stage 7
+# gates: contract-check.yml (contract-breaking-change, oasdiff) and nightly-scan.yml (scheduled scans, ADR-012).
+
 
 on:
   push:
@@ -147,6 +150,26 @@ jobs:
           cache-dependency-path: 02-python-transformation-api/requirements*.txt   # the cache key now covers both files
       - working-directory: 02-python-transformation-api
         run: pip install -r requirements-dev.txt                 # runtime + test tools (was: requirements.txt only)
+      # Stage 7: lint, then types, then tests. The cheapest check runs first, so a slip fails in seconds.
+      # ruff reads ruff.toml in this folder: a pinned rule set, because ruff's default set grew in 0.16.
+      - name: Lint (ruff)
+        working-directory: 02-python-transformation-api
+        run: ruff check app tests
+      # A ratchet: the three known errors of D24 (app/api/readings.py, owned by POC 3) are allowed, a fourth fails the
+      # job. MYPY_MAX only ever goes down: when D24 is fixed, it becomes 0 in the same pull request.
+      - name: Type check (mypy, ratchet)
+        working-directory: 02-python-transformation-api
+        env:
+          MYPY_MAX: "3"
+        run: |
+          python -m mypy app --ignore-missing-imports > "$RUNNER_TEMP/mypy.txt" 2>&1 || true
+          cat "$RUNNER_TEMP/mypy.txt"
+          # mypy's last line says how the check ended; without it (a crash, a bad option) zero errors would mean nothing.
+          grep -Eq '^(Success: no issues found|Found [0-9]+ errors? in)' "$RUNNER_TEMP/mypy.txt" || { echo "::error::mypy did not complete its check"; exit 1; }
+          COUNT=$(grep -c ': error:' "$RUNNER_TEMP/mypy.txt" || true)
+          echo "mypy errors: $COUNT, allowed: $MYPY_MAX"
+          if [ "$COUNT" -gt "$MYPY_MAX" ]; then echo "::error::mypy reports $COUNT errors, at most $MYPY_MAX are allowed (D24). Fix the new ones."; exit 1; fi
+          if [ "$COUNT" -lt "$MYPY_MAX" ]; then echo "::notice::mypy reports $COUNT errors: lower MYPY_MAX to $COUNT in this pull request."; fi
       - working-directory: 02-python-transformation-api
         env:
           DATABASE_URL: postgresql+psycopg://smart_meter_admin:ci-only-test-password@127.0.0.1:5432/smart_meter_warehouse # disposable CI test value, not an actual credential
@@ -224,31 +247,30 @@ jobs:
       - run: pip install -r e2e/requirements.txt
       - name: End-to-end tests
         run: python -m pytest e2e            # from the repository root; support.py defaults to 127.0.0.1
-      # Advisory until Stage 7 (docs/api/README.md, "Conformance findings (Stage 4)"): the findings are recorded
-      # defects with closing stages, so a failure is shown with a warning mark but does not fail the job.
+      # Blocking since Stage 7 (docs/api/README.md, "CI gates on the contracts"): any Schemathesis report fails the job.
       # Two separate steps: each step runs under bash -e, so findings in a first run would stop a second run in the
       # same step. --continue-on-failure: keep generating cases for an operation after its first failure.
-      - name: Schemathesis against the Python contract (advisory)
-        continue-on-error: true
+      - name: Schemathesis against the Python contract
         run: >
           docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
           run /w/docs/api/validator.openapi.yaml --url http://127.0.0.1:8082
           -H "X-EAI-TOKEN: $API_SECURITY_TOKEN" --checks all --continue-on-failure
-      # The gateway contract now requires a bearer token (5.14). A step of its own, so that the token is fetched just
+      # The gateway contract requires a bearer token (5.14). A step of its own, so that the token is fetched just
       # before the run that needs it (tokens live 300 s; the run takes about ten), masked, and passed on through
-      # GITHUB_ENV. Advisory like the run it serves: if Keycloak fails here, the e2e tests above have already failed.
-      - name: Token for the gateway contract run (advisory)
-        continue-on-error: true
+      # GITHUB_ENV. GitHub runs bash with -e and pipefail, so a failed curl or a body without a token fails the step.
+      - name: Token for the gateway contract run
         run: |
           GW_TOKEN=$(curl -sS -d grant_type=client_credentials -d client_id=ingest-client -d "client_secret=$KEYCLOAK_CLIENT_SECRET" http://127.0.0.1:8180/realms/eai/protocol/openid-connect/token | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
           echo "::add-mask::$GW_TOKEN"
           echo "GW_TOKEN=$GW_TOKEN" >> "$GITHUB_ENV"
-      - name: Schemathesis against the gateway contract (advisory)
-        continue-on-error: true
+      # One check is switched off, by name, with its reason (D47, accepted by design in Stage 6): Tomcat refuses TRACE
+      # with 400 before Spring runs, so unsupported_method can never pass here, and production edges block TRACE.
+      # Every other check of --checks all stays on.
+      - name: Schemathesis against the gateway contract
         run: >
           docker run --rm --network host -v "$PWD:/w" schemathesis/schemathesis:4.31.1
           run /w/docs/api/gateway.openapi.yaml --url http://127.0.0.1:8081
-          -H "Authorization: Bearer $GW_TOKEN" --checks all --continue-on-failure
+          -H "Authorization: Bearer $GW_TOKEN" --checks all --exclude-checks unsupported_method --continue-on-failure
       - name: Service logs (on failure)
         if: failure()                        # only after an earlier, non-advisory step failed
         run: |

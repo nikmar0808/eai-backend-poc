@@ -73,7 +73,7 @@ services:
       - INTEGRATION_PYTHON_BASE-URL=http://python-validator:8082
       - INTEGRATION_PYTHON_AUTH-TOKEN=${API_SECURITY_TOKEN:?set in .env}
       - TZ=Asia/Kolkata
-      - JAVA_OPTS=-Duser.timezone=Asia/Kolkata
+      - JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Kolkata
       - SPRINGDOC_ENABLED=true
     ports: ["8081:8081"]
       # Comment above and uncomment the line below to override the host port for java-gateway to prevent collision with another set of services on port 8081
