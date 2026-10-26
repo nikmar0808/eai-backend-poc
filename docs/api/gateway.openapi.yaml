@@ -160,9 +160,8 @@ components:
           description: Optional grid voltage reading, 100 to 300 inclusive.
     TransformationResponse:
       type: object
-      required: [message, metadata, analytics_summary]
+      required: [metadata, analytics_summary]
       properties:
-        message: { type: string }
         metadata:
           type: object
           required: [processed_asset, regional_zone, intervals_saved]
