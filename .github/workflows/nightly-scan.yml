@@ -1,0 +1,57 @@
+name: Nightly scan
+
+# Stage 7 (ADR-012). A scan result depends on the day it runs, not only on the code: an advisory published tonight
+# makes an unchanged image fail tomorrow (D41, D42). ci.yml scans only when code changes (a push or a pull
+# request); this workflow scans the default branch (main, what was last released) every night, with the same rules.
+#
+# A scheduled run always uses the workflow file and the code of the default branch. GitHub disables a schedule after
+# 60 days without activity in a public repository, and e-mails a failed scheduled run to the user who last changed
+# the cron line.
+
+on:
+  schedule:
+    - cron: "43 20 * * *"   # 20:43 UTC = 02:13 IST. Not minute 0: runs at the top of the hour are delayed the most
+  workflow_dispatch:         # run by hand: Actions tab -> Nightly scan -> Run workflow, or gh workflow run nightly-scan.yml
+  pull_request:              # the pull request that changes this file proves that it still runs
+    branches: [develop, main]
+    paths: [".github/workflows/nightly-scan.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  nightly-fs-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: 1
+          format: table
+
+  nightly-image-scan:
+    name: nightly-image-scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: eai-java-gateway,     context: 01-java-ingestion-service }
+          - { image: eai-python-validator, context: 02-python-transformation-api }
+    steps:
+      - uses: actions/checkout@v4
+      # --pull: fetch the base image's tag afresh, so a base image rebuilt by its maintainers is what gets scanned.
+      - run: docker build --pull -t ${{ matrix.image }}:nightly ./${{ matrix.context }}
+      - uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ${{ matrix.image }}:nightly
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: 1

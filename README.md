@@ -68,16 +68,28 @@ curl -X POST http://localhost:8081/api/v1/ingest/bulk \
 
 ## Delivery pipeline
 
-One workflow, [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Nothing is deployed from this repository.
+Three workflows in [`.github/workflows/`](.github/workflows/). Nothing is deployed from this repository.
 
 ```mermaid
 flowchart LR
-    S["secret scan<br/>dependency scan"] --> BT["build and test<br/>Java, Python"] --> IS["image scan x2<br/>pull requests only<br/>nothing pushed"]
+    S["secret scan<br/>dependency scan"] --> BT["build and test<br/>Java: tests, JaCoCo gate<br/>Python: ruff, mypy ratchet, tests, coverage gate"]
+    BT --> IS["image scan x2<br/>pull requests only<br/>nothing pushed"]
+    BT --> E2E["e2e: the real stack<br/>cross-service tests<br/>Schemathesis on both contracts"]
+    CL["contract lint<br/>Spectral"]
+    CB["contract breaking change<br/>oasdiff, pull requests"]
 ```
+
+| Workflow | Runs | What it does |
+|---|---|---|
+| `ci.yml` | every pull request; pushes to `develop` and `feature/**` | the gates in the diagram except the breaking-change check; every job is a required check on `develop` and `main` |
+| `contract-check.yml` | every pull request, and when its labels change | compares both contracts with the target branch's versions; a breaking change needs the label `breaking-change-approved` ([`docs/api/README.md`](docs/api/README.md)) |
+| `nightly-scan.yml` | every night at 02:13 IST, and by hand | Trivy over the dependency files and both images, rebuilt from `main` ([ADR-012](docs/adr/ADR-012-base-image-policy.md)) |
+
 
 - Secret scanning combines TruffleHog (verified and unknown findings) and Gitleaks over the full history, with a project-specific rule held in a repository secret.
 - Trivy scans the dependency files and each image. The build fails on CRITICAL and HIGH findings that have a fix. Findings without a fix are ignored as not actionable, and an accepted fixable finding is recorded in [`.trivyignore`](.trivyignore) with an expiry date.
 - Every change reaches `develop` through a pull request, and `develop` reaches `main` with a merge commit.
+- Dependabot proposes dependency, base-image and action updates every week as pull requests into `develop`, which pass the same gates.
 
 The scan gates were first built and proved in `eai-azure-poc`, where the findings were triaged and fixed rather than only listed (see that repository's README, section "Vulnerability and secret remediation").
 
@@ -100,7 +112,7 @@ The scan gates were first built and proved in `eai-azure-poc`, where the finding
 - [x] Stage 4 — cross-service integration tests in CI
 - [x] Stage 5 — OAuth2/JWT resource server with Keycloak
 - [x] Stage 6 — error model, versioning policy, downstream error mapping
-- [ ] Stage 7 — CI gates: coverage, lint, contract, breaking change, end-to-end
+- [x] Stage 7 — CI gates: coverage, lint, contract, breaking change, end-to-end
 - [ ] Stage 8 — architecture document and retrospective
 
 ## Documentation
