@@ -1,7 +1,9 @@
 # Stage 7 (ADR-012). Dependabot opens a pull request into develop when a newer version of a dependency, a base image
 # or an action exists. Each pull request runs the full CI like any other and is merged (squash) or closed by hand.
-# Dependabot reads this file from the default branch (main), so it starts after the promotion of Stage 7.
-# Minor and patch updates of one folder come as one grouped pull request a week; a major update comes on its own.
+# Dependabot reads this file from the default branch (main), so a change here takes effect after the next promotion.
+# Minor and patch updates of one folder come as one grouped pull request a week. Major versions are not proposed: a new
+# major version of a framework, a library or a base image is a decision with a work item of its own, not an update.
+# D53: three rules below come from the first run, where these updates could not pass CI.
 version: 2
 updates:
   - package-ecosystem: maven
@@ -12,6 +14,10 @@ updates:
     groups:
       maven-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Spring Boot 4 and springdoc 3 (Jackson 3, new package names) did not even build: an upgrade project.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /02-python-transformation-api
@@ -21,6 +27,15 @@ updates:
     groups:
       python-service-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+      # The optional Azure Monitor tracing set must move as one: each azure-monitor-opentelemetry release pins an exact
+      # exporter beta, which pins an exact opentelemetry-api minor. Updated one at a time, pip cannot install them.
+      # Updated by hand, as a set, until the observability POC replaces it (README, Known limitations).
+      - dependency-name: "azure-monitor-opentelemetry*"
+      - dependency-name: "azure-core-tracing-opentelemetry"
+      - dependency-name: "opentelemetry-*"
 
   - package-ecosystem: pip
     directory: /e2e
@@ -30,6 +45,9 @@ updates:
     groups:
       e2e-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   # FROM lines of both Dockerfiles. A major version of a base image (Java 25, for example) is a decision, not an update.
   - package-ecosystem: docker
@@ -39,6 +57,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # The build image's tag puts Maven's version first (3.9.6-eclipse-temurin-21-alpine), so a Java upgrade (21 to 26)
+      # reads as a Maven change and passes the rule above. The build stage is not in the shipped image: updated by hand.
+      - dependency-name: "maven"
 
   - package-ecosystem: docker
     directory: /02-python-transformation-api
