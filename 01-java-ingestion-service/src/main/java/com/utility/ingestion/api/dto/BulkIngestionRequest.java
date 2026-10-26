@@ -31,6 +31,6 @@ public record BulkIngestionRequest(
         @Size(max = 1000, message = "At most 1000 readings per request")
         // Container-element constraints: @NotNull applies to EACH element, so [null] is refused (finding D36);
         // @Valid on the element type replaces the old @Valid on the list and validates each reading.
-        List<@NotNull(message = "A reading must not be null") @Valid MeterReadingRequest> readings
+        List<@Valid MeterReadingRequest> readings
 ) {
 }
