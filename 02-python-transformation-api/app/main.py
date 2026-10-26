@@ -6,6 +6,7 @@ if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     SQLAlchemyInstrumentor().instrument()
 
 import logging
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
