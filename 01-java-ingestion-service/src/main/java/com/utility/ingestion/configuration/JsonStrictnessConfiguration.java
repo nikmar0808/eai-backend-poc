@@ -25,7 +25,9 @@ public class JsonStrictnessConfiguration {
                     .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
                     .setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
             mapper.coercionConfigFor(LogicalType.Float)                  // target: a Double field
-                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail);
+                    .setCoercion(CoercionInputShape.String, CoercionAction.Fail)
+                    .setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail)   // "" is a shape of its own; its default is null (D52)
+                    .setAcceptBlankAsEmpty(false);                                      // "   " likewise: refused, not treated as ""
         });
     }
 }

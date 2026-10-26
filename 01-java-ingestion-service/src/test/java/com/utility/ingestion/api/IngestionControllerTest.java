@@ -294,4 +294,18 @@ class IngestionControllerTest {
                 .andExpect(jsonPath("$.errors[0].field").value(field));
         verify(ingestionService, never()).ingest(any());
     }
+
+    @ParameterizedTest(name = "voltage {0} is refused")
+    @ValueSource(strings = {"\"\"", "\"   \""})
+    void anEmptyOrBlankStringAsVoltageIsRejectedWith400(String value) throws Exception {     // D52 (Stage 7)
+        // Jackson's default turns an empty string into null for a Double field, so "" passed as "no voltage" and the
+        // request was stored. The contract says voltage is a number or null; a string of any kind is refused.
+        String body = TestData.VALID_JSON.replace("230.0", value);
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors[0].field").value("readings[0].voltage"));
+        verify(ingestionService, never()).ingest(any());
+    }
 }
