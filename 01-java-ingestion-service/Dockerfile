@@ -6,7 +6,7 @@
 # Also notice the use of FROM ... AS ... multi-stage build.
 
 # --- STAGE 1: Compilation Engine ---
-FROM maven:3.9.6-eclipse-temurin-21-alpine AS compiler
+FROM maven:3.9-eclipse-temurin-26-alpine AS compiler
 WORKDIR /build
 
 # Isolate pom.xml resolution to leverage caching layers
