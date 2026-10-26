@@ -1,0 +1,47 @@
+name: Contract check
+
+# Stage 7. Compares each contract in a pull request with the same file on the branch the pull request targets, and
+# fails on a breaking change: what oasdiff rates ERR, such as a removed path, a removed required response field, a
+# tightened limit or a new required request field. Spectral (contract-lint in ci.yml) reads one file and asks "is
+# this a good contract?"; oasdiff reads two versions and asks "would a client written against the old one break?".
+#
+# A workflow of its own, not a job in ci.yml, for one reason: it must run again when a label is added or removed, and
+# a label change must not re-run all of ci.yml (the e2e stack takes about ten minutes).
+#
+# A deliberate breaking change is approved with the label breaking-change-approved (docs/api/README.md, Versioning
+# policy): the job is then skipped, and GitHub counts a skipped job as passed for a required status check.
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  contract-breaking-change:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'breaking-change-approved') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }      # all branches and their history, so that git show can read the target branch
+      - name: Read both contracts as they are on the target branch
+        env:
+          BASE: ${{ github.base_ref }}  # develop or main; passed as a variable, never pasted into the script itself
+        run: |
+          mkdir -p "$RUNNER_TEMP/base"
+          for f in gateway validator; do
+            git show "origin/$BASE:docs/api/$f.openapi.yaml" > "$RUNNER_TEMP/base/$f.openapi.yaml"
+          done
+      - name: Breaking changes (oasdiff)
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          rc=0
+          for f in gateway validator; do
+            echo "== $f.openapi.yaml: origin/$BASE -> this pull request"
+            docker run --rm -v "$RUNNER_TEMP/base:/base:ro" -v "$PWD/docs/api:/rev:ro" tufin/oasdiff:v1.33.0 \
+              breaking "/base/$f.openapi.yaml" "/rev/$f.openapi.yaml" --fail-on ERR || rc=1
+          done
+          exit $rc

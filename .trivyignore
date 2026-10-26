@@ -1,17 +1,18 @@
+# org.apache.tomcat.embed:tomcat-embed-core 10.1.55, fixed in 11.0.25, 10.1.58, 9.0.121; java scan, Java. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-65182 exp:2026-12-31
+# org.apache.tomcat.embed:tomcat-embed-core 10.1.55, fixed in 11.0.25, 10.1.58, 9.0.121; java scan, Java. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-65905 exp:2026-12-31
+# org.apache.tomcat.embed:tomcat-embed-core 10.1.55, fixed in 11.0.25, 10.1.58, 9.0.121; java scan, Java. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-68525 exp:2026-12-31
+# org.springframework:spring-webmvc 6.2.19, fixed in 7.0.9; java scan, Java. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-47884 exp:2026-12-31
+# org.springframework:spring-webmvc 6.2.19, fixed in 7.0.9; java scan, Java. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-47890 exp:2026-12-31
+# setuptools 70.3.0, fixed in 78.1.1; python scan, Python. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2025-47273 exp:2026-12-31
-CVE-2025-69720 exp:2026-12-31
-CVE-2026-16742 exp:2026-12-31
-CVE-2026-54369 exp:2026-12-31
-CVE-2026-76642 exp:2026-12-31
-CVE-2026-78408 exp:2026-12-31
-CVE-2026-78409 exp:2026-12-31
-CVE-2026-78410 exp:2026-12-31
-CVE-2026-9538 exp:2026-12-31
+# urllib3 2.7.0, fixed in 2.8.0; python scan, Python. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-97687 exp:2026-12-31
+# urllib3 2.7.0, fixed in 2.8.0; python scan, Python. Re-triaged 2026-10-26 (Stage 7, D21).
 CVE-2026-97689 exp:2026-12-31
+# msgpack 1.1.2, fixed in 1.2.1; python scan, Python. Re-triaged 2026-10-26 (Stage 7, D21).
 GHSA-6v7p-g79w-8964 exp:2026-12-31
