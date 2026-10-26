@@ -76,7 +76,9 @@ hop still uses the shared token.
 - The URL prefix `/api/v1` stays until a change cannot be made compatibly; then `/api/v2` is introduced beside it.
 - A breaking change (removing or renaming a response field, making an optional request field required, tightening a
   limit, changing an error body) must be made on purpose: the version in `info.version` is raised in the same pull
-  request, and the breaking-change check (oasdiff, Stage 7) is acknowledged in the pull request description.
+  request, and the pull request carries the label `breaking-change-approved`, which is the reviewer's acknowledgement
+  of the `contract-breaking-change` report. A promotion pull request that carries the change to `main` needs the label
+  again.
 
 ## Known deviations (the contract is ahead of the code)
 
@@ -121,5 +123,19 @@ Schemathesis 4.31.1 against the gateway after Stage 6A (25 October 2026), in CI 
 | D44 | A header, URL or method refused by Spring Security's firewall answered 500 | Closed (Stage 6): 400 problem details |
 | D45 | Java counted identifier length in UTF-16 code units, the contract and Python in characters | Closed (Stage 6): identifiers are printable ASCII |
 | D46 | The contract constrained an `Idempotency-Key` header the gateway ignored | Closed (Stage 6): header removed until POC 3 implements it (D8) |
-| D47 | `TRACE` answers 400 problem details, not 405: Tomcat refuses the method before Spring runs | Accepted by design; production edges block `TRACE` |
+| D47 | `TRACE` answers 400 problem details, not 405: Tomcat refuses the method before Spring runs | Accepted by design; production edges block `TRACE`. Excluded by name from the gateway's blocking Schemathesis run (`--exclude-checks unsupported_method`, Stage 7) |
 | D48 | A JSON boolean or number was accepted as a string, and a string as a number | Closed (Stage 6): strict JSON types in both services |
+
+## CI gates on the contracts (Stage 7)
+
+Every row is a required status check on `develop` and `main`.
+
+| Gate | Job (workflow) | Fails when |
+|---|---|---|
+| Lint | `contract-lint` (`ci.yml`), Spectral 6, `--fail-severity warn` | a contract has an error or a warning |
+| Breaking change | `contract-breaking-change` (`contract-check.yml`), oasdiff 1.33.0, `--fail-on ERR` | a pull request changes a contract in a way that breaks a client of the target branch's version; skipped when the pull request carries the label `breaking-change-approved` |
+| Conformance | `e2e` (`ci.yml`), Schemathesis 4.31.1, `--checks all` against the running stack | any report; on the gateway, `unsupported_method` is excluded (D47) |
+
+A Schemathesis run generates new cases every time, so it can find a defect a pull request did not cause. The report
+then holds a `curl` command that reproduces the case; the defect is fixed or recorded here, never hidden by making the
+step advisory again.

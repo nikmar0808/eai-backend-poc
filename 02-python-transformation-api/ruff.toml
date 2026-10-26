@@ -1,0 +1,9 @@
+# ruff, the Python linter of python-build-test (Stage 7). The rule set is named, not left to ruff's default: the
+# default grew in ruff 0.16 (on this code base, 28 findings instead of none), and a gate whose meaning changes with
+# every upgrade of the tool is not a gate. Widening it is a pull request of its own that fixes what the new rules find.
+#   E4  import placement (E401 several imports on one line, E402 import not at the top of the file)
+#   E7  statements (E711 comparison with None using ==, E722 a bare except:, E741 an ambiguous name such as l)
+#   E9  syntax errors and code that cannot be read
+#   F   pyflakes: unused imports and variables, undefined names, a redefinition, an f-string without placeholders
+[lint]
+select = ["E4", "E7", "E9", "F"]

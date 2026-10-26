@@ -1,0 +1,58 @@
+# Stage 7 (ADR-012). Dependabot opens a pull request into develop when a newer version of a dependency, a base image
+# or an action exists. Each pull request runs the full CI like any other and is merged (squash) or closed by hand.
+# Dependabot reads this file from the default branch (main), so it starts after the promotion of Stage 7.
+# Minor and patch updates of one folder come as one grouped pull request a week; a major update comes on its own.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /01-java-ingestion-service
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /02-python-transformation-api
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      python-service-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /e2e
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 3
+    groups:
+      e2e-minor-and-patch:
+        update-types: [minor, patch]
+
+  # FROM lines of both Dockerfiles. A major version of a base image (Java 25, for example) is a decision, not an update.
+  - package-ecosystem: docker
+    directory: /01-java-ingestion-service
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: docker
+    directory: /02-python-transformation-api
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # The uses: lines of every workflow in .github/workflows. Images started with docker run inside a step are not seen.
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ["*"]
