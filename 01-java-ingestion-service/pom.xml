@@ -19,7 +19,13 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Overrides Spring Boot 3.5.16's managed Jackson 2 version (carried from eai-azure-poc for a scan finding).
+             Remove with the Spring Boot 4 upgrade: Boot 4 uses Jackson 3 (group tools.jackson), and this breaks it. -->
         <jackson-bom.version>2.21.7</jackson-bom.version>
+        <!-- Overrides Spring Boot 3.5.16's managed Tomcat (10.1.55) for CVE-2026-65637 (CRITICAL, fixed in 10.1.59).
+             Moves tomcat-embed-core, -websocket and -el together. Spring Boot 3.5 has had no free releases since its
+             open-source support ended in June 2026 (D54): remove with the Spring Boot 4 upgrade. -->
+        <tomcat.version>10.1.61</tomcat.version>
     </properties>
 
     <dependencies>
