@@ -31,6 +31,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Remove pip from the runtime image (CVE-2026-114613: pip 26.2.2 vendors msgpack 1.1.2; pip's fix is on its main
+# branch, not yet released). The service installs nothing at run time: its packages are installed in the builder
+# stage and copied in below. A package manager inside a running service is attack surface with no function.
+# To list installed packages without pip: python -c "import importlib.metadata as m; print(sorted((d.name, d.version) for d in m.distributions()))"
+RUN python -m pip uninstall --yes pip
+
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 
