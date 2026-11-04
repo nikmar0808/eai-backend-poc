@@ -25,7 +25,7 @@ def test_a_valid_request_through_the_gateway_is_summarised_and_stored(gateway, v
     assert response.headers["content-type"].startswith("application/json")
     assert response.json() == {
         "message": "Payload schema validated and saved successfully to grid warehouse",
-        "metadata": {"processed_asset": meter, "regional_zone": "ZONE-A", "intervals_saved": 2},
+        "metadata": {"processed_asset": meter, "regional_zone": "ZONE-A", "intervals_saved": 2, "duplicates_ignored": 0},
         "analytics_summary": {"cumulative_kwh": 30.0, "average_load_per_interval": 15.0},
     }
 
@@ -36,12 +36,10 @@ def test_a_valid_request_through_the_gateway_is_summarised_and_stored(gateway, v
     ).fetchall()
     assert rows == [("ZONE-A", 10.0, 230.0), ("ZONE-A", 20.0, None)]     # None is SQL NULL: the 2nd reading had no voltage
 
-    # Finding D14: the column has no time zone, so the stored wall-clock value depends on the database's time zone
-    # (Asia/Kolkata in the compose file). The test therefore does not hard-code it; it asks the database to convert
-    # the sent instant the same way and compares. (%s::timestamptz casts the text to a timestamp WITH time zone;
-    # ::timestamp then drops the zone, exactly what the column definition does on insert.)
+    # The column holds an exact moment (timestamptz), so it compares with the instant sent, whatever the database's
+    # time zone is.
     matching = db.execute(
-        "SELECT count(*) FROM smart_meter_intervals WHERE meter_id = %s AND timestamp = (%s::timestamptz)::timestamp",
+        "SELECT count(*) FROM smart_meter_intervals WHERE meter_id = %s AND timestamp = %s::timestamptz",
         (meter, "2026-10-09T00:00:00Z"),
     ).fetchone()[0]
     assert matching == 1
@@ -72,10 +70,10 @@ def test_python_rejects_callers_without_the_token_and_stores_nothing(validator, 
 
 
 # E07
-def test_documents_D8_the_same_request_posted_twice_is_stored_twice(gateway, db):
-    # Finding D8: no unique constraint and no idempotency. POC 3 changes the expected count from 4 to 2.
+def test_the_same_request_posted_twice_is_stored_once(gateway, db):
+    # POC 3 closed this finding: until then, the count was 4.
     meter = f"{METER_PREFIX}-D"
     for _ in range(2):
         assert gateway.post("/api/v1/ingest/bulk", json=valid_body(meter)).status_code == 200
 
-    assert row_count(db, meter) == 4
+    assert row_count(db, meter) == 2

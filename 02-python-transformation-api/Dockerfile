@@ -50,7 +50,10 @@ COPY --from=builder /root/.local /home/appuser/.local
 
 # Step 5: Transfer the functional enterprise application logic into the box 
 # Only what runtime needs — not tests/, not test_data/, not this Dockerfile. 
-COPY app ./app 
+COPY app ./app
+# Alembic's settings and the migration files: the one-shot service db-migrate runs them from this image.
+COPY alembic.ini ./
+COPY migrations ./migrations 
 
 RUN chown -R appuser:appgroup /app /home/appuser/.local 
 

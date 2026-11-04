@@ -7,7 +7,8 @@ from pydantic import BaseModel
 class TransformMetadata(BaseModel):
     processed_asset: str
     regional_zone: str
-    intervals_saved: int
+    intervals_saved: int      # new readings stored by this request
+    duplicates_ignored: int   # readings of this request whose meter and moment were already stored
 
 
 class AnalyticsSummary(BaseModel):
@@ -22,7 +23,7 @@ class TransformResponse(BaseModel):
 
 
 class ReadingOut(BaseModel):
-    # Stored values are naive local date-times and are returned without an offset (finding D14, contract note).
+    # An exact moment, always returned in UTC, whatever the database session's time zone is.
     timestamp: datetime
     kwh_value: float
     voltage: Optional[float]

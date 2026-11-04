@@ -66,6 +66,12 @@ curl -X POST http://localhost:8081/api/v1/ingest/bulk \
 
 `.env` is ignored by Git.
 
+## Database changes
+
+Alembic owns the tables ([ADR-006](docs/adr/ADR-006-alembic-owns-the-schema.md)). The files are in
+`02-python-transformation-api/migrations/versions/`; the one-shot Compose service `db-migrate` applies them before
+`python-validator` starts. A reading is stored once per meter per moment, and a repeat is ignored and counted.
+
 ## Delivery pipeline
 
 Three workflows in [`.github/workflows/`](.github/workflows/). Nothing is deployed from this repository.
@@ -99,7 +105,7 @@ The scan gates were first built and proved in `eai-azure-poc`, where the finding
 |---|---|
 | The two services share one static token and the gateway has no caller authentication | OAuth2/JWT in Stage 5; production adds mutual TLS or workload identity between services |
 | PostgreSQL runs as a local container with a named volume | A production system uses a managed database service with backups |
-| No migration tool: the Python service creates its tables when it starts | Planned with the data layer |
+| kWh and voltage are stored as floating-point numbers, and the migration takes a short outage | An exact `numeric` type would need its own migration and API review; expand and contract avoids the outage on a large table (ADR-006) |
 | The Python service carries optional Azure Monitor tracing (inactive unless `APPLICATIONINSIGHTS_CONNECTION_STRING` is set), which brings a large dependency set | Redone vendor-neutral, with free tooling, in the observability POC |
 
 ## Roadmap

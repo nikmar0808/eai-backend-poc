@@ -9,7 +9,7 @@ removes them.
 counting rows with the test's own session, documenting a known defect with a passing test - are explained at
 the top of test_transform.py.)
 """
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -17,7 +17,7 @@ from app.database.models import SmartMeterIntervalRecord
 
 pytestmark = pytest.mark.db
 
-START = datetime(2026, 10, 9, 0, 0, 0)       # naive on purpose: the column is a naive DateTime (finding D14)
+START = datetime(2026, 10, 9, 0, 0, 0, tzinfo=UTC)       # an exact moment, as the column holds
 
 
 def seed(db_session, meter_id: str, count: int, voltage=None) -> None:
@@ -53,7 +53,7 @@ def test_readings_come_back_newest_first_in_the_documented_shape(client, auth_he
 
     assert body["count"] == 3
     assert [r["kwh_value"] for r in body["readings"]] == [3.0, 2.0, 1.0]       # newest (kWh 3.0) first
-    assert body["readings"][0] == {"timestamp": "2026-10-09T01:00:00", "kwh_value": 3.0, "voltage": 230.0}
+    assert body["readings"][0] == {"timestamp": "2026-10-09T01:00:00Z", "kwh_value": 3.0, "voltage": 230.0}
 
 
 def test_a_missing_voltage_is_returned_as_null(client, auth_headers, db_session):         # P31

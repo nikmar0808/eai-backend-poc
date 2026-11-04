@@ -10,7 +10,8 @@ public record TransformationResponse(
     public record Metadata(
             @JsonProperty("processed_asset") String processedAsset,
             @JsonProperty("regional_zone") String regionalZone,
-            @JsonProperty("intervals_saved") int intervalsSaved
+            @JsonProperty("intervals_saved") int intervalsSaved,
+            @JsonProperty("duplicates_ignored") int duplicatesIgnored
     ) {
     }
 
