@@ -1,6 +1,8 @@
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Float, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.connection import Base
@@ -25,4 +27,16 @@ class SmartMeterIntervalRecord(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))        # an exact moment: timestamptz
     kwh_value: Mapped[float] = mapped_column(Float)
     voltage: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IdempotencyKeyRecord(Base):
+    """One client key: which request it was first used for, and the answer that request received."""
+
+    __tablename__ = "idempotency_key"
+    __table_args__ = (Index("idempotency_key_created_ix", "created_at"),)
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

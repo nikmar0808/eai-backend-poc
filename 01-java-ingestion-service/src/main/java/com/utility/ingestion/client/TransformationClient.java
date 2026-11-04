@@ -23,10 +23,15 @@ public class TransformationClient implements TransformationGateway {
     }
 
     @Override
-    public TransformationResponse transform(BulkIngestionRequest request) {
+    public TransformationResponse transform(BulkIngestionRequest request, String idempotencyKey) {
         return restClient.post()
                 .uri("/api/v1/transform")
                 .contentType(MediaType.APPLICATION_JSON)
+                .headers(headers -> {
+                    if (idempotencyKey != null) {        // no key from the client: no header on this call either
+                        headers.set("Idempotency-Key", idempotencyKey);
+                    }
+                })
                 .body(request)
                 .retrieve()
                 .body(TransformationResponse.class);

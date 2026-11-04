@@ -9,5 +9,6 @@ import com.utility.ingestion.api.dto.TransformationResponse;
  */
 public interface TransformationGateway {
 
-    TransformationResponse transform(BulkIngestionRequest request);
+    /** The key may be null: a client need not send one. */
+    TransformationResponse transform(BulkIngestionRequest request, String idempotencyKey);
 }

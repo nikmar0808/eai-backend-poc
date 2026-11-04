@@ -45,7 +45,7 @@ def test_a_401_is_problem_json(client):                                         
 
 
 def test_a_database_failure_gives_500_without_internals(client, auth_headers, monkeypatch):   # P48 (was P25), D6
-    def failing_store(db, payload):
+    def failing_store(db, payload, idempotency_key):
         # What a real psycopg error's text looks like: SQL, table, column names and a value.
         raise RuntimeError("[SQL: INSERT INTO smart_meter_intervals (meter_id) VALUES (%(m)s)] [parameters: SECRET-42]")
 

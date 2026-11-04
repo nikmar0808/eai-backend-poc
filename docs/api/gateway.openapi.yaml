@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EAI Ingestion Gateway API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Public API of java-gateway. Accepts bulk smart-meter readings, validates them, forwards them to
     python-validator and returns the analytics summary. Hand-written (contract-first): the code conforms to this
@@ -47,6 +47,8 @@ paths:
       tags: [Ingestion]
       operationId: ingestBulk
       summary: Submit bulk meter readings
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
       description: |
         Validates the request, forwards it to python-validator and returns its analytics summary. A reading whose meter
         and moment are already stored is ignored and counted in `duplicates_ignored`.
@@ -90,6 +92,11 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
+        "409":
+          description: The Idempotency-Key was already used for a different request.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "415":
           description: The body is not `application/json`.
           content:
@@ -106,6 +113,19 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Chosen by the client, one per logical request (a UUID is usual), and sent again unchanged on a retry. A repeat
+        gets the first answer and stores nothing.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[\x21-\x7E]{1,64}$'
   securitySchemes:
     bearerAuth:
       type: http

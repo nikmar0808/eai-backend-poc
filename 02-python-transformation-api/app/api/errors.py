@@ -7,6 +7,7 @@ Three kinds of exception reach a client, and each gets a handler:
 - RequestValidationError: Pydantic found a broken rule (422 with an `errors` list in the gateway's field format), or
   the body is not well-formed JSON (422, no list: a JSON syntax error has a character position, not a field).
 - StorageFailure: the database write failed. 500 with a fixed sentence and NOTHING from the exception (finding D6).
+- IdempotencyConflict: an Idempotency-Key was reused for a different request. 409 with a fixed sentence.
 A last handler for Exception covers the unexpected.
 """
 
@@ -19,6 +20,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.services.ingestion import IdempotencyConflict
 
 PROBLEM_JSON = "application/problem+json"
 # The first element of a Pydantic location says where the value came from; it is not part of the field's name.
@@ -90,6 +93,10 @@ async def storage_problem(request: Request, exc: Exception) -> JSONResponse:
     return problem(request, 500, "The readings could not be stored.")
 
 
+async def idempotency_problem(request: Request, exc: Exception) -> JSONResponse:
+    return problem(request, 409, "This Idempotency-Key was already used for a different request.")
+
+
 async def unexpected_problem(request: Request, exc: Exception) -> JSONResponse:
     logger.error("Unexpected error (%s); answering 500", type(exc).__name__)
     return problem(request, 500, "An unexpected error occurred.")
@@ -99,4 +106,5 @@ def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, http_problem)
     app.add_exception_handler(RequestValidationError, validation_problem)
     app.add_exception_handler(StorageFailure, storage_problem)
+    app.add_exception_handler(IdempotencyConflict, idempotency_problem)
     app.add_exception_handler(Exception, unexpected_problem)

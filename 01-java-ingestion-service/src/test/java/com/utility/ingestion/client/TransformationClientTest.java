@@ -19,6 +19,7 @@ import java.io.IOException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
@@ -46,7 +47,7 @@ class TransformationClientTest {
                 .andExpect(header("X-EAI-TOKEN", "test-token"))
                 .andRespond(withSuccess(TestData.PYTHON_RESPONSE_JSON, MediaType.APPLICATION_JSON));
 
-        TransformationResponse response = client.transform(TestData.validRequest());
+        TransformationResponse response = client.transform(TestData.validRequest(), null);
 
         assertThat(response.message()).isEqualTo("ok");
         assertThat(response.metadata().processedAsset()).isEqualTo("MTR-POC2-001");
@@ -56,12 +57,32 @@ class TransformationClientTest {
     }
 
     @Test
+    void passesTheIdempotencyKeyOn() {
+        server.expect(requestTo(TRANSFORM_URL))
+                .andExpect(header("Idempotency-Key", "key-1"))
+                .andRespond(withSuccess(TestData.PYTHON_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        client.transform(TestData.validRequest(), "key-1");
+        server.verify();
+    }
+
+    @Test
+    void sendsNoKeyHeaderWhenTheClientSentNone() {
+        server.expect(requestTo(TRANSFORM_URL))
+                .andExpect(headerDoesNotExist("Idempotency-Key"))
+                .andRespond(withSuccess(TestData.PYTHON_RESPONSE_JSON, MediaType.APPLICATION_JSON));
+
+        client.transform(TestData.validRequest(), null);
+        server.verify();
+    }
+
+    @Test
     void makesExactlyOneCallWhenTheServiceFails() {
         // Finding D1 (retry loop) is fixed. If a retry is ever reintroduced, the mock server rejects the
         // second request ("No further requests expected") and this test fails.
         server.expect(requestTo(TRANSFORM_URL)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
-        assertThatThrownBy(() -> client.transform(TestData.validRequest()))
+        assertThatThrownBy(() -> client.transform(TestData.validRequest(), null))
                 .isInstanceOf(HttpServerErrorException.class);
         server.verify();
     }
@@ -70,7 +91,7 @@ class TransformationClientTest {
     void aRejectionByTheServiceSurfacesAsAClientErrorException() {
         server.expect(requestTo(TRANSFORM_URL)).andRespond(withStatus(HttpStatus.UNPROCESSABLE_ENTITY));
 
-        assertThatThrownBy(() -> client.transform(TestData.validRequest()))
+        assertThatThrownBy(() -> client.transform(TestData.validRequest(), null))
                 .isInstanceOf(HttpClientErrorException.class)
                 .extracting(e -> ((HttpClientErrorException) e).getStatusCode().value())
                 .isEqualTo(422);
@@ -81,7 +102,7 @@ class TransformationClientTest {
     void anUnreachableServiceSurfacesAsAResourceAccessException() {
         server.expect(requestTo(TRANSFORM_URL)).andRespond(withException(new IOException("connection refused")));
 
-        assertThatThrownBy(() -> client.transform(TestData.validRequest()))
+        assertThatThrownBy(() -> client.transform(TestData.validRequest(), null))
                 .isInstanceOf(ResourceAccessException.class);
         server.verify();
     }
