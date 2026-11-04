@@ -1,25 +1,36 @@
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.database.models import SmartMeterIntervalRecord
+from app.database.models import READING_KEY, SmartMeterIntervalRecord
 from app.schemas.meter import SmartMeterPayload
 from app.schemas.responses import AnalyticsSummary, TransformMetadata, TransformResponse
 
 
 def store_readings(db: Session, payload: SmartMeterPayload) -> TransformResponse:
-    """Stage one row per reading, commit them in a single transaction and summarise them.
+    """Store the batch's new readings in one transaction, and summarise the batch as it was received.
 
-    The caller owns error handling and rollback. The payload is already validated, so it holds at least one reading.
+    A reading whose meter and moment are already stored is left as it is, whatever value it carries: the first value
+    stands. ON CONFLICT DO NOTHING makes that safe when two requests arrive together, and RETURNING lists only the
+    rows really inserted. The caller owns error handling and rollback. The payload is already validated, so it holds
+    at least one reading.
     """
-    for reading in payload.readings:
-        db.add(
-            SmartMeterIntervalRecord(
-                meter_id=payload.meter_id,
-                grid_zone=payload.grid_zone,
-                timestamp=reading.timestamp,
-                kwh_value=reading.kwh_value,
-                voltage=reading.voltage,
-            )
-        )
+    rows = [
+        {
+            "meter_id": payload.meter_id,
+            "grid_zone": payload.grid_zone,
+            "timestamp": reading.timestamp,
+            "kwh_value": reading.kwh_value,
+            "voltage": reading.voltage,
+        }
+        for reading in payload.readings
+    ]
+    statement = (
+        insert(SmartMeterIntervalRecord)
+        .values(rows)
+        .on_conflict_do_nothing(constraint=READING_KEY)
+        .returning(SmartMeterIntervalRecord.id)
+    )
+    saved = len(db.execute(statement).all())
     db.commit()
 
     total_intervals = len(payload.readings)
@@ -29,7 +40,8 @@ def store_readings(db: Session, payload: SmartMeterPayload) -> TransformResponse
         metadata=TransformMetadata(
             processed_asset=payload.meter_id,
             regional_zone=payload.grid_zone,
-            intervals_saved=total_intervals,
+            intervals_saved=saved,
+            duplicates_ignored=total_intervals - saved,
         ),
         analytics_summary=AnalyticsSummary(
             cumulative_kwh=total_kwh,

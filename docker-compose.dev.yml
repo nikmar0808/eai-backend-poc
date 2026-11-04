@@ -35,6 +35,18 @@ services:
       timeout: 5s
       retries: 10
   
+  # A one-shot job: brings the database up to the latest migration, then exits. Built from the same image as the
+  # service. restart "no": a job that has finished must not be started again (ADR-006).
+  db-migrate:
+    build: { context: ./02-python-transformation-api, dockerfile: Dockerfile }
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://smart_meter_admin:${POSTGRES_PASSWORD:?set in .env}@postgres-db:5432/smart_meter_warehouse
+    depends_on:
+      postgres-db: { condition: service_healthy }
+    networks: [eai-mesh]
+
   # Node 2: High-Speed Validation API Tier
   python-validator:
     build: { context: ./02-python-transformation-api, dockerfile: Dockerfile }
@@ -50,6 +62,7 @@ services:
       # - "${VALIDATOR_HOST_PORT:-8082}:8082"  # fine to keep exposed for LOCAL dev/testing — this is the dev compose file only
     depends_on:
       postgres-db: { condition: service_healthy }
+      db-migrate: { condition: service_completed_successfully }   # start only after the migration has succeeded
     healthcheck:
       # Python's own /health runs SELECT 1 and answers 503 when the database is down. urlopen raises an exception on
       # any 4xx or 5xx answer, and "python -c" turns an uncaught exception into exit code 1, so the exit code is

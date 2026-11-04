@@ -91,7 +91,7 @@ hop still uses the shared token.
 | 5 | ~~Gateway `/health` reflects the database through Python's `/health`~~ | Probes Python's `/`, which checks nothing downstream | Stage 1A |
 | 6 | ~~Readings route rejects a `meter_id` outside 5 to 20 characters (422)~~ | Accepts any string | Stage 1A |
 | 7 | ~~Gateway answers 502 or 504 when the downstream rejects, fails, is unreachable or times out~~ | Answers a generic 500 | Stage 6 |
-| 8 | Readings `timestamp` is a local date-time without offset | Same (documented as it is) | POC 3 (`timestamptz`) |
+| 8 | ~~Readings `timestamp` is a local date-time without offset~~ | Same (documented as it is) | POC 3: an exact moment, returned in UTC |
 | 9 | ~~`details` keys are field names~~ | The keys are Java property names (meterId) — D22 | Stage 6 |
 
 ## Conformance findings (Stage 4)
