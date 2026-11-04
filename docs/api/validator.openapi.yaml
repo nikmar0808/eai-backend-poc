@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: EAI Transformation Service API
-  version: 0.2.0
+  version: 0.4.0
   description: |
     API of python-validator. The transform route is called by java-gateway; the readings route is called directly
     by clients. Both require the shared token. Hand-written (contract-first); known deviations are listed in
@@ -58,7 +58,11 @@ paths:
       tags: [Ingestion]
       operationId: transformReadings
       summary: Validate and store readings
-      description: Authenticates the caller, validates the payload, stores one row per reading in one transaction.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      description: |
+        Authenticates the caller, validates the payload, and stores the new readings in one transaction. A reading
+        whose meter and moment are already stored is ignored and counted in `duplicates_ignored`.
       requestBody:
         required: true
         content:
@@ -80,8 +84,13 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/Problem" }
+        "409":
+          description: The Idempotency-Key was already used for a different request.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
         "422":
-          description: The body is not well-formed JSON (no errors list), or the payload failed validation.
+          description: The body is not well-formed JSON (no errors list), the payload failed validation, or the Idempotency-Key broke its rule.
           content:
             application/problem+json:
               schema: { $ref: "#/components/schemas/ValidationProblem" }
@@ -126,6 +135,19 @@ paths:
 security:
   - ApiKeyAuth: []
 components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Chosen by the client, one per logical request (a UUID is usual), and sent again unchanged on a retry. A repeat
+        gets the first answer and stores nothing.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[\x21-\x7E]{1,64}$'
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
@@ -174,11 +196,16 @@ components:
         message: { type: string }
         metadata:
           type: object
-          required: [processed_asset, regional_zone, intervals_saved]
+          required: [processed_asset, regional_zone, intervals_saved, duplicates_ignored]
           properties:
             processed_asset: { type: string }
             regional_zone: { type: string }
-            intervals_saved: { type: integer }
+            intervals_saved:
+              type: integer
+              description: New readings stored by this request.
+            duplicates_ignored:
+              type: integer
+              description: Readings of this request whose meter and moment were already stored. The first value stands.
         analytics_summary:
           type: object
           required: [cumulative_kwh, average_load_per_interval]
@@ -200,10 +227,9 @@ components:
       properties:
         timestamp:
           type: string
-          description: |
-            ISO 8601 local date-time WITHOUT an offset, as stored (for example 2026-10-09T05:30:00).
-            Not RFC 3339. Becomes an offset date-time when storage moves to timestamptz (POC 3, finding D14).
-          example: "2026-10-09T05:30:00"
+          format: date-time
+          description: The exact moment, always in UTC.
+          example: "2026-10-09T00:00:00Z"
         kwh_value: { type: number, format: double }
         voltage: { type: number, format: double, nullable: true }
     ServiceInfo:

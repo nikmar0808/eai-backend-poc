@@ -21,7 +21,7 @@ public final class TestData {
     /** What python-validator answers for the valid request. */
     public static final String PYTHON_RESPONSE_JSON = """
             {"message":"ok",
-             "metadata":{"processed_asset":"MTR-POC2-001","regional_zone":"ZONE-A","intervals_saved":1},
+             "metadata":{"processed_asset":"MTR-POC2-001","regional_zone":"ZONE-A","intervals_saved":1,"duplicates_ignored":0},
              "analytics_summary":{"cumulative_kwh":12.5,"average_load_per_interval":12.5}}
             """;
 
@@ -40,7 +40,7 @@ public final class TestData {
     public static TransformationResponse response() {
         return new TransformationResponse(
                 "ok",
-                new TransformationResponse.Metadata("MTR-POC2-001", "ZONE-A", 1),
+                new TransformationResponse.Metadata("MTR-POC2-001", "ZONE-A", 1, 0),
                 new TransformationResponse.AnalyticsSummary(12.5, 12.5));
     }
 }

@@ -27,6 +27,8 @@ import org.springframework.security.test.context.support.WithMockUser;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -69,7 +71,7 @@ class IngestionControllerTest {
 
     @Test
     void aValidRequestIsPassedToTheServiceAndTheResponseIsReturnedAsJson() throws Exception {
-        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenReturn(TestData.response());
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any())).thenReturn(TestData.response());
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
                 .andExpect(status().isOk())
@@ -80,7 +82,7 @@ class IngestionControllerTest {
                 .andExpect(jsonPath("$.analytics_summary.cumulative_kwh").value(12.5));
 
         ArgumentCaptor<BulkIngestionRequest> captor = ArgumentCaptor.forClass(BulkIngestionRequest.class);
-        verify(ingestionService).ingest(captor.capture());
+        verify(ingestionService).ingest(captor.capture(), isNull());      // no header, no key
         assertThat(captor.getValue().meterId()).isEqualTo("MTR-POC2-001");
         assertThat(captor.getValue().readings()).hasSize(1);
     }
@@ -101,7 +103,7 @@ class IngestionControllerTest {
                 // Finding D22 closed: the fields are named as the client sent them.
                 .andExpect(jsonPath("$.errors[*].field", hasItems("meter_id", "readings[0].voltage")));
 
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
@@ -110,7 +112,7 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))   // D35 closed
                 .andExpect(jsonPath("$.detail").value("The request body is not well-formed JSON."));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
@@ -119,7 +121,7 @@ class IngestionControllerTest {
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(naive))
                 .andExpect(status().isBadRequest());
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
@@ -139,7 +141,7 @@ class IngestionControllerTest {
         // A 422 body as Python sends it: it echoes the client's input. A recognisable value is planted in it, and the
         // test asserts that it never reaches the client (A7).
         byte[] pythonBody = "{\"detail\":[{\"input\":\"SECRET-INPUT-VALUE\"}]}".getBytes(StandardCharsets.UTF_8);
-        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any())).thenThrow(
                 HttpClientErrorException.create(HttpStatus.UNPROCESSABLE_ENTITY, "Unprocessable",
                         HttpHeaders.EMPTY, pythonBody, StandardCharsets.UTF_8));
 
@@ -158,7 +160,7 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.errors[0].field").value("readings[0].timestamp"));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @ParameterizedTest(name = "offset {0} is refused")
@@ -170,12 +172,12 @@ class IngestionControllerTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("readings[0].timestamp"));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
     void anOffsetOfExactlyFourteenHoursIsAccepted() throws Exception {                        // C07, boundary
-        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenReturn(TestData.response());
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any())).thenReturn(TestData.response());
         String body = TestData.VALID_JSON.replace("2026-10-09T00:00:00Z", "2026-10-09T00:00:00+14:00");
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
@@ -189,7 +191,7 @@ class IngestionControllerTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItems("readings[0]")));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @ParameterizedTest(name = "a control character in {0} is refused")
@@ -203,13 +205,13 @@ class IngestionControllerTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItems(field)));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
     void aDownstreamTimeoutGives504() throws Exception {                                       // C05, D3
         // What RestClient throws when the read timeout of Stage 1A expires.
-        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any())).thenThrow(
                 new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out")));
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
@@ -219,7 +221,7 @@ class IngestionControllerTest {
 
     @Test
     void anUnreachableDownstreamGives502() throws Exception {                                  // C06, D3
-        when(ingestionService.ingest(any(BulkIngestionRequest.class))).thenThrow(
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any())).thenThrow(
                 new ResourceAccessException("I/O error", new ConnectException("Connection refused")));
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
@@ -229,7 +231,7 @@ class IngestionControllerTest {
     @Test
     void anUnexpectedErrorGives500WithoutItsMessage() throws Exception {                       // C11, A6 last row, A7
         // A failure nobody planned for. Its message is planted with a recognisable value, which must not reach the client.
-        when(ingestionService.ingest(any(BulkIngestionRequest.class)))
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), any()))
                 .thenThrow(new IllegalStateException("SECRET-INTERNAL-STATE"));
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON))
@@ -246,7 +248,7 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value("The request body could not be read."));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
 
@@ -261,7 +263,7 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value(JsonRequestRejectedHandler.REJECTED_DETAIL));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @Test
@@ -274,7 +276,7 @@ class IngestionControllerTest {
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[*].field", hasItems("meter_id")));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 
     @ParameterizedTest(name = "{0} of the wrong JSON type is refused")
@@ -292,7 +294,38 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.errors[0].field").value(field));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void anIdempotencyKeyIsPassedToTheService() throws Exception {
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), eq("key-1"))).thenReturn(TestData.response());
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
+                        .header("Idempotency-Key", "key-1"))
+                .andExpect(status().isOk());
+    }
+
+    @ParameterizedTest(name = "key [{0}] is refused")
+    @ValueSource(strings = {"", "has space", "12345678901234567890123456789012345678901234567890123456789012345"})
+    void anIdempotencyKeyOutsideTheRuleIsRejectedWith400(String key) throws Exception {
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
+                        .header("Idempotency-Key", key))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.errors[0].field").value("Idempotency-Key"));
+        verify(ingestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void aKeyReusedForAnotherRequestGives409() throws Exception {
+        when(ingestionService.ingest(any(BulkIngestionRequest.class), eq("key-1"))).thenThrow(
+                HttpClientErrorException.create(HttpStatus.CONFLICT, "Conflict", HttpHeaders.EMPTY, new byte[0], StandardCharsets.UTF_8));
+
+        mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
+                        .header("Idempotency-Key", "key-1"))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     @ParameterizedTest(name = "voltage {0} is refused")
@@ -306,6 +339,6 @@ class IngestionControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.errors[0].field").value("readings[0].voltage"));
-        verify(ingestionService, never()).ingest(any());
+        verify(ingestionService, never()).ingest(any(), any());
     }
 }

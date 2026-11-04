@@ -1,33 +1,42 @@
-import datetime
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
-# for fixing mypy errors in legacy SQLAlchemy 2.0 style later in POC 3
-# from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
 from app.database.connection import Base
 
-
-def _utc_now_naive() -> datetime.datetime:
-    """Current UTC time without tzinfo: the same value utcnow() returned, without the deprecated call (finding D14)."""
-    return datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+READING_KEY = "smart_meter_intervals_meter_time_uk"
 
 
 class SmartMeterIntervalRecord(Base):
-    """Relational schema map representing the persistent system of record."""
+    """One reading. Alembic builds this table (migrations/); this class must match it, which `alembic check` proves.
+
+    Mapped[...] gives each attribute its Python type, which mypy can check: Mapped[float | None] may be None, and
+    Mapped[datetime] may not. mapped_column(...) gives the column's database type and rules.
+    """
 
     __tablename__ = "smart_meter_intervals"
+    # One reading per meter per moment. Its index also serves the readings query (newest first, for one meter).
+    __table_args__ = (UniqueConstraint("meter_id", "timestamp", name=READING_KEY),)
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    meter_id = Column(String(20), index=True, nullable=False)
-    grid_zone = Column(String(50), nullable=False)
-    timestamp = Column(DateTime, nullable=False)
-    kwh_value = Column(Float, nullable=False)
-    voltage = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=_utc_now_naive)
-    # for fixing mypy errors in legacy SQLAlchemy 2.0 style later in POC 3
-    # id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
-    # meter_id: Mapped[str] = mapped_column(String(20), index=True, nullable=False)
-    # grid_zone: Mapped[str] = mapped_column(String(50), nullable=False)
-    # timestamp: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
-    # kwh_value: Mapped[float] = mapped_column(Float, nullable=False)
-    # voltage: Mapped[float] = mapped_column(Float, nullable=True)
-    # created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=_utc_now_naive)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    meter_id: Mapped[str] = mapped_column(String(20))
+    grid_zone: Mapped[str] = mapped_column(String(50))
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))        # an exact moment: timestamptz
+    kwh_value: Mapped[float] = mapped_column(Float)
+    voltage: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IdempotencyKeyRecord(Base):
+    """One client key: which request it was first used for, and the answer that request received."""
+
+    __tablename__ = "idempotency_key"
+    __table_args__ = (Index("idempotency_key_created_ix", "created_at"),)
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

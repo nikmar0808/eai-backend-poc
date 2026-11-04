@@ -17,12 +17,8 @@ from app.api.errors import register_error_handlers
 
 from app.config import settings
 
-# --- DATABASE ENGINE IMPORTS ---
+# --- DATABASE ENGINE IMPORT --- (Alembic builds the tables, before this service starts: docs/adr/ADR-006.)
 from app.database.connection import engine
-from app.database.models import Base
-
-# Force table generation inside the PostgreSQL container at system startup
-Base.metadata.create_all(bind=engine)
 
 # Configure unified structured logging for the application lifecycle
 LOG_FORMAT = "%(asctime)s - %(levelname)s - [%(name)s] - %(message)s"

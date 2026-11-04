@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -34,12 +35,14 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 @pytest.fixture(scope="session")      # built ONCE per test run: the engine holds no per-test state
 def engine():
-    """The application's own engine, with the tables created once (idempotent)."""
+    """The application's own engine, with the tables built by the real migrations (safe to run again)."""
     # Imports are INSIDE the function on purpose (A6): the application is imported only when a test needs it.
-    from app.database import models  # noqa: F401  (importing registers the table classes on Base)
-    from app.database.connection import Base, engine as app_engine
+    from alembic import command
+    from alembic.config import Config
+    from app.database.connection import engine as app_engine
 
-    Base.metadata.create_all(bind=app_engine)   # creates the table if absent; does nothing if present
+    # The same files that build every other database, so the tests also prove that the migrations work.
+    command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini")), "head")
     yield app_engine                            # everything before yield = set-up; everything after = tear-down
     app_engine.dispose()                        # close the pool at the end of the run
 

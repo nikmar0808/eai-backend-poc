@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,7 @@ from app.database.connection import get_db_session
 from app.schemas.meter import SmartMeterPayload
 from app.schemas.responses import TransformResponse
 
-from app.services.ingestion import store_readings
+from app.services.ingestion import IdempotencyConflict, store_readings
 
 # Configure structured logging for the API module
 logger = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ router = APIRouter(prefix="/api/v1", tags=["Ingestion & Transformation"])
 @router.post(
     "/transform",
     status_code=status.HTTP_200_OK,
-    responses={401: {"description": "Missing or invalid X-EAI-TOKEN"}, 500: {"description": "Database write failure"}},
+    responses={401: {"description": "Missing or invalid X-EAI-TOKEN"}, 409: {"description": "Idempotency-Key already used for a different request"},
+               500: {"description": "Database write failure"}},
 )
 # This is the critical link. By typing the incoming payload variable as your Pydantic SmartMeterPayload class,
 # FastAPI automatically performs three background steps the moment a request hits the server:
@@ -57,9 +59,16 @@ def validate_and_transform_payload(
     payload: SmartMeterPayload,
     authenticated: str = Depends(authenticate_request),
     db: Session = Depends(get_db_session),
+    idempotency_key: Annotated[
+        str | None,
+        Header(alias="Idempotency-Key", pattern=r"^[\x21-\x7E]{1,64}$", description="1 to 64 visible ASCII characters."),
+    ] = None,
 ) -> TransformResponse:
     try:
-        return store_readings(db, payload)
+        return store_readings(db, payload, idempotency_key)
+    except IdempotencyConflict:
+        db.rollback()
+        raise                      # the client's mistake, not a storage failure: errors.py answers 409
     except Exception as error:
         db.rollback()
         # Finding D6: a database error's text contains the SQL statement, table and column names and the values.

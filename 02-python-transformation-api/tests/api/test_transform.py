@@ -95,7 +95,7 @@ def test_a_valid_request_is_summarised_and_stored(client, auth_headers, db_sessi
     assert response.status_code == 200
     assert response.json() == {
         "message": "Payload schema validated and saved successfully to grid warehouse",
-        "metadata": {"processed_asset": "MTR-POC2-001", "regional_zone": "ZONE-A", "intervals_saved": 3},
+        "metadata": {"processed_asset": "MTR-POC2-001", "regional_zone": "ZONE-A", "intervals_saved": 3, "duplicates_ignored": 0},
         "analytics_summary": {"cumulative_kwh": 3.0, "average_load_per_interval": 1.0},
     }
     assert row_count(db_session) == 3          # the answer is not enough: the rows must really be there
@@ -127,12 +127,48 @@ def test_authentication_is_checked_before_validation(client):                   
     assert client.post(URL, json=body(grid_zone=""), headers={}).status_code == 401
 
 
-def test_documents_D8_the_same_reading_posted_twice_is_stored_twice(client, auth_headers, db_session):   # P24
-    # Finding D8: no unique constraint and no idempotency. POC 3 adds both and flips this assertion to 1.
+def test_the_same_reading_posted_twice_is_stored_once(client, auth_headers, db_session):   # P24
+    # POC 3 closed this finding: until then, it was stored twice.
     client.post(URL, json=body(), headers=auth_headers)
-    client.post(URL, json=body(), headers=auth_headers)
+    again = client.post(URL, json=body(), headers=auth_headers)
 
-    assert row_count(db_session) == 2
+    assert again.status_code == 200
+    assert again.json()["metadata"] == {
+        "processed_asset": "MTR-POC2-001", "regional_zone": "ZONE-A", "intervals_saved": 0, "duplicates_ignored": 1,
+    }
+    assert row_count(db_session) == 1
+
+
+def test_the_first_value_stands_when_a_moment_is_sent_again_with_another(client, auth_headers, db_session):
+    client.post(URL, json=body(), headers=auth_headers)
+    changed = body()
+    changed["readings"][0]["kwh_value"] = 99.0
+
+    client.post(URL, json=changed, headers=auth_headers)
+
+    stored = db_session.scalar(select(SmartMeterIntervalRecord.kwh_value))
+    assert stored == 1.0
+
+
+def test_a_moment_repeated_inside_one_batch_is_stored_once(client, auth_headers, db_session):
+    payload = body(readings=2)
+    payload["readings"][1]["timestamp"] = payload["readings"][0]["timestamp"]
+
+    response = client.post(URL, json=payload, headers=auth_headers)
+
+    assert response.json()["metadata"]["intervals_saved"] == 1
+    assert response.json()["metadata"]["duplicates_ignored"] == 1
+    assert row_count(db_session) == 1
+
+
+def test_one_moment_written_with_two_offsets_is_one_reading(client, auth_headers, db_session):
+    payload = body()
+    payload["readings"][0]["timestamp"] = "2026-10-09T05:30:00+05:30"     # the same moment as 00:00Z
+    client.post(URL, json=payload, headers=auth_headers)
+
+    response = client.post(URL, json=body(), headers=auth_headers)        # 2026-10-09T00:00:00Z
+
+    assert response.json()["metadata"]["duplicates_ignored"] == 1
 
 
 def test_the_write_route_is_a_plain_def_so_it_does_not_block_the_event_loop():            # P26

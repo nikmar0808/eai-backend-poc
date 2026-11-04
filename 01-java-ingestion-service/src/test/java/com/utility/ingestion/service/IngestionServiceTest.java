@@ -26,20 +26,20 @@ class IngestionServiceTest {
     private IngestionService service;
 
     @Test
-    void delegatesTheRequestToTheGatewayAndReturnsItsResponse() {
+    void delegatesTheRequestAndTheKeyToTheGatewayAndReturnsItsResponse() {
         BulkIngestionRequest request = TestData.validRequest();
         TransformationResponse expected = TestData.response();
-        when(gateway.transform(request)).thenReturn(expected);
+        when(gateway.transform(request, "key-1")).thenReturn(expected);
 
-        assertThat(service.ingest(request)).isSameAs(expected);
-        verify(gateway).transform(request);
+        assertThat(service.ingest(request, "key-1")).isSameAs(expected);
+        verify(gateway).transform(request, "key-1");
     }
 
     @Test
     void doesNotSwallowAFailureOfTheGateway() {
-        when(gateway.transform(TestData.validRequest())).thenThrow(new ResourceAccessException("down"));
+        when(gateway.transform(TestData.validRequest(), null)).thenThrow(new ResourceAccessException("down"));
 
-        assertThatThrownBy(() -> service.ingest(TestData.validRequest()))
+        assertThatThrownBy(() -> service.ingest(TestData.validRequest(), null))
                 .isInstanceOf(ResourceAccessException.class);
     }
 }

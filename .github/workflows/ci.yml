@@ -52,7 +52,7 @@ jobs:
             echo "regex = '''${PROJECT_REGEX}'''"
           } > "$RUNNER_TEMP/gitleaks.toml"
           docker run --rm -v "$PWD:/repo" -v "$RUNNER_TEMP/gitleaks.toml:/gitleaks.toml:ro" \
-            zricethezav/gitleaks:latest detect --source /repo --config /gitleaks.toml --redact -v
+            zricethezav/gitleaks:v8.30.1 detect --source /repo --config /gitleaks.toml --redact -v
 
   dependency-scan:
     runs-on: ubuntu-latest
@@ -155,12 +155,11 @@ jobs:
       - name: Lint (ruff)
         working-directory: 02-python-transformation-api
         run: ruff check app tests
-      # A ratchet: the three known errors of D24 (app/api/readings.py, owned by POC 3) are allowed, a fourth fails the
-      # job. MYPY_MAX only ever goes down: when D24 is fixed, it becomes 0 in the same pull request.
+      # A ratchet that has reached zero: POC 3 typed the models, and no error is allowed. MYPY_MAX only ever goes down.
       - name: Type check (mypy, ratchet)
         working-directory: 02-python-transformation-api
         env:
-          MYPY_MAX: "3"
+          MYPY_MAX: "0"
         run: |
           python -m mypy app --ignore-missing-imports > "$RUNNER_TEMP/mypy.txt" 2>&1 || true
           cat "$RUNNER_TEMP/mypy.txt"
@@ -168,7 +167,7 @@ jobs:
           grep -Eq '^(Success: no issues found|Found [0-9]+ errors? in)' "$RUNNER_TEMP/mypy.txt" || { echo "::error::mypy did not complete its check"; exit 1; }
           COUNT=$(grep -c ': error:' "$RUNNER_TEMP/mypy.txt" || true)
           echo "mypy errors: $COUNT, allowed: $MYPY_MAX"
-          if [ "$COUNT" -gt "$MYPY_MAX" ]; then echo "::error::mypy reports $COUNT errors, at most $MYPY_MAX are allowed (D24). Fix the new ones."; exit 1; fi
+          if [ "$COUNT" -gt "$MYPY_MAX" ]; then echo "::error::mypy reports $COUNT errors, at most $MYPY_MAX are allowed. Fix them."; exit 1; fi
           if [ "$COUNT" -lt "$MYPY_MAX" ]; then echo "::notice::mypy reports $COUNT errors: lower MYPY_MAX to $COUNT in this pull request."; fi
       - working-directory: 02-python-transformation-api
         env:

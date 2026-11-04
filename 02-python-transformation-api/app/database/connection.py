@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
 DATABASE_URL = os.environ["DATABASE_URL"]   # KeyError at start-up if absent (fail fast)
@@ -14,7 +14,11 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+
+
+class Base(DeclarativeBase):
+    """The parent of every table class. A real class, which mypy can follow; declarative_base() was not."""
+
 
 def get_db_session():
     """Injects thread-isolated database sessions into API routes."""

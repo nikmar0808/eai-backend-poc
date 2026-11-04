@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -32,5 +33,5 @@ def get_recent_readings(
     return ReadingsResponse(
         meter_id=meter_id,
         count=len(rows),
-        readings=[ReadingOut(timestamp=r.timestamp, kwh_value=r.kwh_value, voltage=r.voltage) for r in rows],
+        readings=[ReadingOut(timestamp=r.timestamp.astimezone(UTC), kwh_value=r.kwh_value, voltage=r.voltage) for r in rows],
     )
