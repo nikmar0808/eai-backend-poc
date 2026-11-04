@@ -12,5 +12,5 @@
 | [011](ADR-011-problem-details.md) | One error format, RFC 9457 problem details, in both services | Accepted |
 | [012](ADR-012-base-image-policy.md) | Base images by version tag, updated at build time, scanned every night, proposed by Dependabot | Accepted |
 
-Number 007 is in `db-lab` (where audit data lives, and choosing between PostgreSQL and MongoDB). Numbers 008 and 009 belong to
+Numbers 007, 013 and 014 are in [`db-lab`](https://github.com/nikmar0808/db-lab/tree/main/docs/adr) (where audit data lives; the lab's repository and branching; local MongoDB and Atlas). Numbers 008 and 009 belong to
 `eai-azure-poc` (edge layer, Azure delivery pipeline) and are not copied here.
