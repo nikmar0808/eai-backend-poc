@@ -1,7 +1,8 @@
 """
 What this file protects. `store_readings` was extracted from the route in Stage 1A precisely so that it can
-be tested without HTTP. It does three things: build one statement for the whole batch, commit once, and compute
-the summary. The collaborator it needs is a database session; a unit test supplies a stand-in.
+be tested without HTTP. Without a key, it does three things: build one statement for the whole batch, commit once, and
+compute the summary. The collaborator it needs is a database session; a unit test supplies a stand-in. What a key adds
+needs a real database, and is in tests/api/test_idempotency.py.
 
 New ideas used here.
 - `MagicMock()` (A5) makes an object that accepts any call. `db.execute.return_value.all.return_value` is what

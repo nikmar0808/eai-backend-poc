@@ -80,7 +80,7 @@ class SecurityRulesTest {
 
     @Test
     void aTokenWithTheScopeReachesTheServiceAndGives200() throws Exception {                   // S03
-        when(ingestionService.ingest(any())).thenReturn(TestData.response());
+        when(ingestionService.ingest(any(), any())).thenReturn(TestData.response());
 
         mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(TestData.VALID_JSON)
                         .with(caller(INGEST)))

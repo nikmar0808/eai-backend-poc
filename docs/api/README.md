@@ -18,6 +18,7 @@ Both are written by hand and are the source of truth; the code conforms to them 
 | `readings[].kwh_value` | a JSON **number** (not a string), greater than 0, at most 1000000 |
 | `readings[].voltage` | optional, 100 to 300 inclusive |
 | unknown properties | ignored |
+| `Idempotency-Key` header | optional, 1 to 64 visible ASCII characters |
 
 ## Error format
 
@@ -33,7 +34,7 @@ Every error response of both services is an RFC 9457 problem-details body, `Cont
 | `instance` | The request path |
 | `errors` | Validation and type errors only: a list of `{field, message}`; `field` is the JSON path as sent, e.g. `readings[0].kwh_value` |
 
-The gateway answers 400 for every rejected body and Python 422. At the gateway, a downstream rejection, failure, refused
+The gateway answers 400 for every rejected body or `Idempotency-Key` and Python 422. An `Idempotency-Key` reused for a different request is 409 from both. At the gateway, a downstream rejection, failure, refused
 connection or unreadable answer is 502; no answer in time, including a connection attempt that times out, is 504. A
 header, URL or method refused by Spring Security's firewall is 400. Logs carry the status and field names, never the
 request's values or a downstream body.
@@ -69,6 +70,16 @@ and rejected); a 403 carries `WWW-Authenticate: Bearer error="insufficient_scope
 
 Known limits: `/health` tells an anonymous caller whether the gateway and Python are up (D27); the gateway-to-Python
 hop still uses the shared token.
+
+## Sending the same request twice
+
+A reading is stored once per meter per moment. Sent again, it is ignored and counted in `duplicates_ignored`; the first
+value stands, so correcting a stored reading needs a route of its own.
+
+A client that retries after a timeout sends an `Idempotency-Key`, the same one on every attempt. The first request that
+succeeds stores the key, a fingerprint of the request and the answer, in the same transaction as the readings. A repeat
+gets that answer. Two requests with one key at the same moment are safe: the second waits for the first to finish. Keys
+are not yet removed; production deletes them by `created_at` on a schedule, after the longest time a client may retry.
 
 ## Versioning policy
 
@@ -122,7 +133,7 @@ Schemathesis 4.31.1 against the gateway after Stage 6A (25 October 2026), in CI 
 |---|---|---|
 | D44 | A header, URL or method refused by Spring Security's firewall answered 500 | Closed (Stage 6): 400 problem details |
 | D45 | Java counted identifier length in UTF-16 code units, the contract and Python in characters | Closed (Stage 6): identifiers are printable ASCII |
-| D46 | The contract constrained an `Idempotency-Key` header the gateway ignored | Closed (Stage 6): header removed until POC 3 implements it (D8) |
+| D46 | The contract constrained an `Idempotency-Key` header the gateway ignored | Closed (Stage 6): header removed until POC 3 implemented it, with its store |
 | D47 | `TRACE` answers 400 problem details, not 405: Tomcat refuses the method before Spring runs | Accepted by design; production edges block `TRACE`. Excluded by name from the gateway's blocking Schemathesis run (`--exclude-checks unsupported_method`, Stage 7) |
 | D48 | A JSON boolean or number was accepted as a string, and a string as a number | Closed (Stage 6): strict JSON types in both services |
 | D52 | An empty or blank string was accepted as a missing `voltage` (found by the blocking gateway run of Stage 7, on a pull request that did not cause it) | Closed (Stage 7): refused with 400 like any other string for a number |

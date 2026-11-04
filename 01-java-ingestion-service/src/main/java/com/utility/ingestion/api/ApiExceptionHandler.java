@@ -76,11 +76,24 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(exception, problem, headers, HttpStatus.BAD_REQUEST, request);
     }
 
+    // ---- 400: the Idempotency-Key header breaks its rule --------------------------------------------------------------
+
+    @ExceptionHandler(InvalidIdempotencyKeyException.class)
+    public ProblemDetail handleInvalidIdempotencyKey(InvalidIdempotencyKeyException exception, HttpServletRequest request) {
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "The request failed validation.", request);
+        problem.setProperty("errors", List.of(Map.of("field", "Idempotency-Key", "message", "must be 1 to 64 visible ASCII characters")));
+        return problem;
+    }
+
     // ---- 502 and 504: the call to python-validator failed (finding D3) ----------------------------------------------
 
     /** Python answered 4xx or 5xx. To the client the gateway IS the API, so this is the gateway's failure: 502. */
     @ExceptionHandler(RestClientResponseException.class)
     public ProblemDetail handleDownstreamAnswer(RestClientResponseException exception, HttpServletRequest request) {
+        // The one downstream answer that is the client's own doing: it reused a key for a different request.
+        if (exception.getStatusCode().value() == HttpStatus.CONFLICT.value()) {
+            return problem(HttpStatus.CONFLICT, "This Idempotency-Key was already used for a different request.", request);
+        }
         // The status only. Python's body is neither logged nor returned: a 422 body echoes the client's input.
         log.warn("python-validator answered {}; answering 502", exception.getStatusCode().value());
         return problem(HttpStatus.BAD_GATEWAY, "python-validator rejected the request or failed.", request);

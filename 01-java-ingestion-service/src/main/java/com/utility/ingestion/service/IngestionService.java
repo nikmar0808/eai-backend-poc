@@ -15,7 +15,8 @@ public class IngestionService {
         this.transformationGateway = transformationGateway;
     }
 
-    public TransformationResponse ingest(BulkIngestionRequest request) {
-        return transformationGateway.transform(request);
+    /** The key may be null: a client need not send one. */
+    public TransformationResponse ingest(BulkIngestionRequest request, String idempotencyKey) {
+        return transformationGateway.transform(request, idempotencyKey);
     }
 }
