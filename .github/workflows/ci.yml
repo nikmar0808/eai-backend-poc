@@ -34,7 +34,7 @@ jobs:
         with: { fetch-depth: 0 }
       # Report "verified" (provably live) AND "unknown" (could not be checked) findings. Verified-only mode can never
       # flag a home-made token, because there is no issuer to verify it against.
-      - uses: trufflesecurity/trufflehog@v3.99.7
+      - uses: trufflesecurity/trufflehog@v3.99.8
         with: { extra_args: "--results=verified,unknown" }
       # Gitleaks: generic secret rules plus the project's own retired literals. The literals live in the repository
       # secret GITLEAKS_PROJECT_REGEX, never in the repository, and --redact keeps any finding out of this public log.

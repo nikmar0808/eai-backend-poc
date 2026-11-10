@@ -27,7 +27,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 FROM python:3.14-slim AS runner
 
+# Apply Debian's security updates at build time (ADR-012, decision 2). Debian publishes a fix days before the
+# python:3.14-slim tag is rebuilt with it, and the nightly scan sees the gap (10 November 2026: zlib1g,
+# CVE-2026-85091 and CVE-2026-76844, fixed in 1:1.3.dfsg+really1.3.1-1+deb13u1).
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
