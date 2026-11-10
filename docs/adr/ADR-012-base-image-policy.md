@@ -21,8 +21,7 @@ because `ci.yml` pins `trivy-action@0.35.0`.
 1. Base images are named by the most specific tag that still receives security rebuilds (`21-jre-alpine`,
    `3.14-slim`), never `latest`.
 2. A runtime stage applies its distribution's security updates at build time where a scan has needed it (the
-   gateway's `apk upgrade --no-cache`, D42). The Python image gets the Debian equivalent the first time a fixable
-   Debian advisory fails `image-scan`.
+   gateway's `apk upgrade --no-cache`, D42). TThe Python image’s runtime stage runs apt-get upgrade since 10 November 2026, when a fixable Debian advisory (zlib1g) failed the nightly `image-scan`.
 3. Every pull request builds and scans both images (`image-scan`, ci.yml); `nightly-scan.yml` rebuilds them from
    `main` with `--pull` and scans them every night with the same rules, so an advisory is seen within a day even when
    nobody opens a pull request.
