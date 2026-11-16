@@ -6,7 +6,7 @@
 # Also notice the use of FROM ... AS ... multi-stage build. 
 
 # Step 1: Use a lightweight official Python 3.14 base runtime image 
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libpcre2-8-0 \
@@ -25,7 +25,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \ 
     pip install --no-cache-dir --user -r requirements.txt 
 
-FROM python:3.14-slim AS runner
+FROM python:3.15-slim AS runner
 
 # Apply Debian's security updates at build time (ADR-012, decision 2). Debian publishes a fix days before the
 # python:3.14-slim tag is rebuilt with it, and the nightly scan sees the gap (10 November 2026: zlib1g,
