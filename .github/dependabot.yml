@@ -68,7 +68,12 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-
+      # The tag carries Python's own version (3.14-slim), so 3.14 to 3.15, a new language version, reads as a minor
+      # update. CI's python-build-test and e2e jobs install Python 3.14: the image and the tests would no longer match.
+      # A Python upgrade is a work item of its own (as for the maven image above). Security fixes still arrive through
+      # the publisher's rebuilds of 3.14-slim and apt-get upgrade in the Dockerfile (ADR-012).
+      - dependency-name: "python"
+  
   # The uses: lines of every workflow in .github/workflows. Images started with docker run inside a step are not seen.
   - package-ecosystem: github-actions
     directory: /
