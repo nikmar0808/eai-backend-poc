@@ -1,0 +1,80 @@
+# Layered over the other two files:
+#   $env:COMPOSE_FILE = 'docker-compose.dev.yml;docker-compose.security.yml;docker-compose.events.yml'
+# Adds Kafka (one broker, KRaft), a one-shot job that creates the topics, and Kafbat UI.
+# The network eai-mesh is defined in docker-compose.dev.yml; Compose merges the files.
+
+volumes:
+  kafka_data:                    # Kafka's log files: events survive a restart, and are removed by "down -v"
+    driver: local
+
+services:
+  kafka:
+    image: apache/kafka:4.4.0    # the Apache project's own image; the tag is the Kafka version
+    restart: always
+    environment:
+      # KRaft: this one process is both the broker and the controller (lesson A2). Development only.
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # A real Kafka cluster ID (16 bytes, base64). Fixed, so the data volume always belongs to this cluster.
+      CLUSTER_ID: hXi-VaW-RWm3gACYjL1qdw
+      # Three doors (lesson A3): INTERNAL for containers, HOST for programs on this machine, CONTROLLER for KRaft.
+      KAFKA_LISTENERS: INTERNAL://:19092,CONTROLLER://:9093,HOST://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,HOST://127.0.0.1:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      # Topics are created by kafka/create-topics.sh, never by accident (lesson A4).
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Kafka's own internal topics default to 3 copies, which one broker cannot hold.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      # Start a new group's first rebalance at once, instead of waiting 3 seconds for more members.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+    ports: ["127.0.0.1:9092:9092"]     # HOST door only, and only on this machine
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks: [eai-mesh]
+    healthcheck:
+      # Healthy when the broker answers a real request on the INTERNAL door.
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --list > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # A one-shot job, like db-migrate: creates the topics once Kafka is healthy, then exits with 0.
+  kafka-topics:
+    image: apache/kafka:4.4.0          # the same image, for its scripts
+    restart: "no"
+    entrypoint: ["/bin/bash", "/scripts/create-topics.sh"]
+    volumes:
+      - ./kafka/create-topics.sh:/scripts/create-topics.sh:ro
+    depends_on:
+      kafka: { condition: service_healthy }
+    networks: [eai-mesh]
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    restart: always
+    environment:
+      KAFKA_CLUSTERS_0_NAME: eai-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+      DYNAMIC_CONFIG_ENABLED: "false"  # no adding clusters from the web page: configuration lives in this file
+    ports: ["127.0.0.1:8090:8080"]     # Kafbat listens on 8080 inside; 8090 on this machine
+    depends_on:
+      kafka: { condition: service_healthy }
+    networks: [eai-mesh]
+    deploy:
+      resources:
+        limits:
+          memory: 512m
