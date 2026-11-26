@@ -82,3 +82,15 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # POC 4: the tools of the event-contract checks (scripts/check-event-examples.py).
+  - package-ecosystem: pip
+    directory: /scripts
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      contract-tools:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

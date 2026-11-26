@@ -4,6 +4,7 @@
 |---|---|---|
 | [`gateway.openapi.yaml`](gateway.openapi.yaml) | `java-gateway`, the public API | Gateway validation, status codes, error bodies |
 | [`validator.openapi.yaml`](validator.openapi.yaml) | `python-validator` | Transform and readings routes, authentication |
+| [`events.asyncapi.yaml`](events.asyncapi.yaml) | Events published by `python-validator` | Topic, key, headers; payload in [`events/readings-stored.schema.json`](events/readings-stored.schema.json), also registered in Apicurio Registry with the BACKWARD rule |
 
 Both are written by hand and are the source of truth; the code conforms to them (ADR-004). OpenAPI 3.0.3.
 
@@ -147,6 +148,8 @@ Every row is a required status check on `develop` and `main`.
 | Lint | `contract-lint` (`ci.yml`), Spectral 6, `--fail-severity warn` | a contract has an error or a warning |
 | Breaking change | `contract-breaking-change` (`contract-check.yml`), oasdiff 1.33.0, `--fail-on ERR` | a pull request changes a contract in a way that breaks a client of the target branch's version; skipped when the pull request carries the label `breaking-change-approved` |
 | Conformance | `e2e` (`ci.yml`), Schemathesis 4.31.1, `--checks all` against the running stack | any report; on the gateway, `unsupported_method` is excluded (D47) |
+| Event contract | `contract-lint` (`ci.yml`), AsyncAPI CLI 5.0.7 and `scripts/check-event-examples.py` | the AsyncAPI document has an error or a warning, or an example event does not behave as its name says |
+| Event schema compatibility | `contract-breaking-change` (`contract-check.yml`), Apicurio Registry 3.3.3, BACKWARD, dry run | the pull request's event schema would break consumers of the target branch's version; skipped with the same label |
 
 A Schemathesis run generates new cases every time, so it can find a defect a pull request did not cause. The report
 then holds a `curl` command that reproduces the case; the defect is fixed or recorded here, never hidden by making the
