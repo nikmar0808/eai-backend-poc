@@ -1,7 +1,12 @@
 -r requirements.txt
 httpx==0.28.1
+# POC 4: jsonschema and rfc3339-validator check real events against the event contract in the tests
+# (tests/event_schema.py). Test tools only: the service never needs them, so requirements.txt does not change.
+# Same versions as scripts/requirements.txt (the CI check of the example events).
+jsonschema==4.26.0
 mypy==2.4.1
 pytest==9.2.0
 pytest-cov==7.1.0
+rfc3339-validator==0.1.4
 ruff==0.17.6
 schemathesis==4.33.4

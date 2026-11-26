@@ -1,0 +1,16 @@
+-- Deletes outbox rows older than one day (POC 4, Stage 2).
+--
+-- Debezium reads new rows from PostgreSQL's change log (the WAL), not from the table, so a row has done its job as
+-- soon as its transaction is committed and Debezium has read it. The rows are kept for a day only so that people
+-- can look at them. Debezium's outbox router ignores deletes, so this statement publishes nothing.
+--
+-- Run it by hand, or on a schedule (production: pg_cron inside PostgreSQL, or a Kubernetes CronJob):
+--   Get-Content scripts\outbox-clean-up.sql | docker compose exec -T postgres-db psql -U smart_meter_admin -d smart_meter_warehouse
+-- psql prints "DELETE <n>": how many rows went.
+--
+-- now()                     the moment this statement's transaction started
+-- now() - interval '1 day'  the same moment yesterday
+-- created_at < ...          rows written before then
+-- The index outbox_created_ix lets PostgreSQL find old rows without reading the whole table (on a small table it
+-- reads the whole table anyway, because that is cheaper: EXPLAIN shows a Seq Scan).
+DELETE FROM outbox WHERE created_at < now() - interval '1 day';
