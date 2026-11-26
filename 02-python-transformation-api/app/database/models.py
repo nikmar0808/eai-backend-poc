@@ -1,7 +1,8 @@
+import uuid                                     # Python's UUID type: the outbox row's id is a uuid.UUID
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,3 +41,25 @@ class IdempotencyKeyRecord(Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     response: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OutboxRecord(Base):
+    """One event waiting to be published (POC 4). Written in the same transaction as the readings it describes.
+
+    Nothing in this service reads the table. Debezium reads the database's change log and publishes each new row to
+    Kafka (Stage 3). The column names are the defaults of Debezium's outbox event router.
+    Like the two classes above, this class only describes the table migration 0004 builds; `alembic check` fails if
+    they ever differ. (J2EE comparison: the mapping an entity bean's deployment descriptor gave, written in code.)
+    """
+
+    __tablename__ = "outbox"                                                     # the table this class maps
+    __table_args__ = (Index("outbox_created_ix", "created_at"),)                 # the clean-up's index, as in 0004
+
+    # Each line: attribute name, its Python type (Mapped[...]), and the column's database type (mapped_column(...)).
+    # A type without "| None" means NOT NULL, matching nullable=False in the migration.
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)                # the event_id; made by the service
+    aggregatetype: Mapped[str] = mapped_column(String(255))                      # 'meter-readings'
+    aggregateid: Mapped[str] = mapped_column(String(255))                        # the meter ID: the Kafka key later
+    type: Mapped[str] = mapped_column(String(255))                               # 'ReadingsStored'
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)                       # the event: a dict in Python, jsonb in the table
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())   # filled by the database
