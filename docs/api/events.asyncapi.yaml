@@ -1,0 +1,86 @@
+asyncapi: 3.0.0
+info:
+  title: EAI meter-reading events
+  version: 1.0.0
+  description: |
+    Events published by python-validator after it stores meter readings. Written first (contract-first), like the
+    REST contracts beside this file. The payload's JSON Schema is also registered in the schema registry as
+    default/meter-readings-stored-value, where its BACKWARD compatibility rule refuses a breaking change.
+
+    The event leaves the service through a transactional outbox: the row is written in the readings' own transaction,
+    and Debezium publishes it to Kafka. Delivery is at least once, so consumers must skip an event_id they have seen.
+  contact:
+    name: eai-backend-poc
+    url: https://github.com/nikmar0808/eai-backend-poc
+defaultContentType: application/json
+
+servers:
+  local:
+    host: 127.0.0.1:9092
+    protocol: kafka
+    description: The single local broker of docker-compose.events.yml (HOST listener). No security, development only.
+
+channels:
+  meterReadingsStored:
+    address: meter-readings-stored
+    title: Meter readings stored
+    description: One event per stored batch. Key = meter_id, so one meter's events stay in order.
+    messages:
+      readingsStored:
+        $ref: '#/components/messages/ReadingsStored'
+    bindings:
+      kafka:
+        topic: meter-readings-stored
+        partitions: 3
+        replicas: 1
+        topicConfiguration:
+          retention.ms: 604800000
+          cleanup.policy: [delete]
+        bindingVersion: 0.5.0
+
+operations:
+  publishReadingsStored:
+    action: send
+    title: Publish readings stored
+    summary: python-validator announces readings it has just stored. Duplicates and repeated requests publish nothing.
+    channel:
+      $ref: '#/channels/meterReadingsStored'
+    messages:
+      - $ref: '#/channels/meterReadingsStored/messages/readingsStored'
+
+components:
+  messages:
+    ReadingsStored:
+      name: ReadingsStored
+      title: Readings stored
+      summary: A batch of readings for one meter, exactly as stored.
+      contentType: application/json
+      headers:
+        type: object
+        required: [id, type]
+        properties:
+          id:
+            type: string
+            description: The event_id again, set by the outbox router, so a consumer can skip a repeat without parsing the body.
+          type:
+            type: string
+            const: ReadingsStored
+      payload:
+        $ref: './events/readings-stored.schema.json'
+      bindings:
+        kafka:
+          key:
+            type: string
+            description: The meter_id.
+          bindingVersion: 0.5.0
+      examples:
+        - name: two-readings
+          summary: Two readings, one without a voltage
+          payload:
+            event_id: 6f1c2d4e-8a7b-4c3d-9e1f-2a3b4c5d6e7f
+            occurred_at: '2026-11-25T04:30:12.345Z'
+            meter_id: MTR-0001
+            grid_zone: SOUTH-01
+            readings:
+              - { timestamp: '2026-11-25T00:00:00Z', kwh_value: 1.5, voltage: 231.0 }
+              - { timestamp: '2026-11-25T00:15:00Z', kwh_value: 1.2, voltage: null }

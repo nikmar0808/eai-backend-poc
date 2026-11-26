@@ -1,0 +1,4 @@
+# Tools for the event-contract checks (scripts/check-event-examples.py), used by CI and by hand.
+# rfc3339-validator is what makes jsonschema check "format": "date-time"; without it the format is ignored.
+jsonschema==4.26.0
+rfc3339-validator==0.1.4

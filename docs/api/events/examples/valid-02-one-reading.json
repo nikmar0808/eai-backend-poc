@@ -1,0 +1,7 @@
+{
+  "event_id": "0b9e4c1a-1f2d-4e5b-8c7a-9d0e1f2a3b4c",
+  "occurred_at": "2026-11-25T04:31:00Z",
+  "meter_id": "MTR-000123",
+  "grid_zone": "ZONE-A",
+  "readings": [ { "timestamp": "2026-01-01T00:00:00Z", "kwh_value": 12.5, "voltage": null } ]
+}

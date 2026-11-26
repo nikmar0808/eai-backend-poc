@@ -73,8 +73,59 @@ services:
     ports: ["127.0.0.1:8090:8080"]     # Kafbat listens on 8080 inside; 8090 on this machine
     depends_on:
       kafka: { condition: service_healthy }
+      kafka-topics: { condition: service_completed_successfully }   # the topics exist before the page shows them
     networks: [eai-mesh]
     deploy:
       resources:
         limits:
           memory: 512m
+
+  # Apicurio Registry: event schemas and their rules. In-memory storage (H2): empty after every restart, which is
+  # why schema-register below registers the schemas each time the stack starts.
+  schema-registry:
+    image: apicurio/apicurio-registry:3.3.3
+    restart: always
+    environment:
+      # The web page (schema-registry-ui) runs in the browser and calls this API from another address.
+      QUARKUS_HTTP_CORS_ORIGINS: http://127.0.0.1:8086
+    ports: ["127.0.0.1:8085:8080"]
+    networks: [eai-mesh]
+    healthcheck:
+      # /health/ready answers 404 in 3.3.3 (pre-check); the API's own system/info answers 200 once it is up.
+      test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/apis/registry/v3/system/info > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  # The registry's web page: a static site that calls the API above from the browser.
+  schema-registry-ui:
+    image: apicurio/apicurio-registry-ui:3.3.3
+    restart: always
+    environment:
+      REGISTRY_API_URL: http://127.0.0.1:8085/apis/registry/v3
+    ports: ["127.0.0.1:8086:8080"]
+    depends_on:
+      schema-register: { condition: service_completed_successfully }   # the schema is registered before the page opens
+    networks: [eai-mesh]
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  # A one-shot job, like kafka-topics: registers every event schema with its rules, then exits with 0.
+  schema-register:
+    image: python:3.14-slim          # the same base image as python-validator; the script needs only the standard library
+    restart: "no"
+    working_dir: /repo
+    command: ["python", "scripts/event-schemas.py", "register", "http://schema-registry:8080"]
+    volumes:
+      - ./docs:/repo/docs:ro
+      - ./scripts:/repo/scripts:ro
+    depends_on:
+      schema-registry: { condition: service_healthy }
+    networks: [eai-mesh]

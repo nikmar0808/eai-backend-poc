@@ -103,6 +103,18 @@ jobs:
         with: { node-version: "22" }
       # Warnings fail the job: the contract has to be clean, not merely valid.
       - run: npx --yes @stoplight/spectral-cli@6 lint --fail-severity warn docs/api/gateway.openapi.yaml docs/api/validator.openapi.yaml
+      # POC 4, Stage 1: the event contract. AsyncAPI CLI validates the document and follows its $ref into the schema.
+      - name: Event contract (AsyncAPI)
+        env:
+          SUPPRESS_NO_CONFIG_WARNING: "true"   # quiets a start-up warning of a library inside the CLI
+        run: npx --yes @asyncapi/cli@5.0.7 validate docs/api/events.asyncapi.yaml --fail-severity warn
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.14" }
+      # Every valid-*.json must pass the schema and every invalid-*.json must fail, with date-time checked (A3).
+      - name: Event examples against the event schema
+        run: |
+          pip install -r scripts/requirements.txt
+          python scripts/check-event-examples.py
 
   java-build-test:
     needs: [secret-scan, dependency-scan]

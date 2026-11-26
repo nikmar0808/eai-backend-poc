@@ -45,3 +45,17 @@ jobs:
               breaking "/base/$f.openapi.yaml" "/rev/$f.openapi.yaml" --fail-on ERR || rc=1
           done
           exit $rc
+      # POC 4, Stage 1: the event schema, judged by the registry itself (A8). Skipped while the target branch has no
+      # event schema yet (the pull request that adds it).
+      - name: Breaking changes in the event schema (Apicurio Registry, BACKWARD)
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          f=docs/api/events/readings-stored.schema.json
+          if ! git cat-file -e "origin/$BASE:$f" 2>/dev/null; then
+            echo "origin/$BASE has no $f yet: nothing to compare."
+            exit 0
+          fi
+          git show "origin/$BASE:$f" > "$RUNNER_TEMP/base-event.schema.json"
+          docker run -d --name registry -p 8085:8080 apicurio/apicurio-registry:3.3.3
+          python3 scripts/event-schemas.py check http://127.0.0.1:8085 "$RUNNER_TEMP/base-event.schema.json" "$f"

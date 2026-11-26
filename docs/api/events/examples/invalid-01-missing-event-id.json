@@ -1,0 +1,6 @@
+{
+  "occurred_at": "2026-11-25T04:30:12Z",
+  "meter_id": "MTR-0001",
+  "grid_zone": "SOUTH-01",
+  "readings": [ { "timestamp": "2026-11-25T00:00:00Z", "kwh_value": 1.5, "voltage": 231.0 } ]
+}
